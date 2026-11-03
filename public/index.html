@@ -12,6 +12,7 @@
 <script src="/vendor/react.production.min.js"></script>
 <script src="/vendor/react-dom.production.min.js"></script>
 <script src="/vendor/framer-motion.js"></script>
+<script src="/vendor/supabase.js"></script>
 <script src="/vendor/babel.min.js"></script>
 <script>
   tailwind.config = {
@@ -78,7 +79,21 @@ const HEAT = {
 };
 
 /* ---------------- API ---------------- */
-const jfetch = (url, opts) => fetch(url, opts).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'eroare'); return d; });
+// Supabase client (created at boot from /api/config) and what to do when the server says 401.
+let sb = null;
+let onUnauthorized = () => {};
+const authHeader = async () => {
+  if (!sb) return {};
+  const { data } = await sb.auth.getSession();
+  return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+};
+const jfetch = async (url, opts = {}) => {
+  const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), ...(await authHeader()) } });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) onUnauthorized();
+  if (!r.ok) throw new Error(d.error || 'eroare');
+  return d;
+};
 const API = {
   get: (p) => jfetch(p),
   post: (p, b) => jfetch(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }),
@@ -117,6 +132,8 @@ const Icons = {
   trash: (p) => <Ic {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Ic>,
   logout: (p) => <Ic {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Ic>,
   spark: (p) => <Ic {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></Ic>,
+  key: (p) => <Ic {...p}><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" /></Ic>,
+  copy: (p) => <Ic {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></Ic>,
 };
 
 /* ---------------- primitives ---------------- */
@@ -326,46 +343,74 @@ function TimetableGrid({ tt, onCell }) {
 /* =====================================================================
  *  LOGIN
  * ===================================================================== */
-function Login({ onPick }) {
-  const [accounts, setAccounts] = useState(null);
-  const [err, setErr] = useState(null);
-  useEffect(() => { API.get('/api/accounts').then((d) => setAccounts(d.accounts)).catch((e) => setErr(String(e.message || e))); }, []);
-  const roleMeta = { admin: { label: 'Administrator', icon: <Icons.building size={18} />, tone: '#0D9488' },
-                     teacher: { label: 'Profesor', icon: <Icons.teacher size={18} />, tone: '#7C3AED' },
-                     student: { label: 'Elev', icon: <Icons.user size={18} />, tone: '#E8650E' } };
+function AuthCard({ sub, children }) {
   return (
     <div className="graph-paper min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-12">
+      <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-12">
         <div className="mb-8 flex items-center gap-3">
           <Logo size={44} />
-          <div><p className="font-display text-2xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">Alege contul cu care intri</p></div>
+          <div><p className="font-display text-2xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">{sub}</p></div>
         </div>
-        {err && <div className="mb-4 rounded-xl border border-heat-heavy/30 bg-white p-4 text-sm text-heat-heavy">Nu pot contacta serverul: {err}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</div>}
-        {!accounts && !err && <div className="flex items-center gap-2 text-muted"><Spinner size={18} /> Se încarcă…</div>}
-        {accounts && (
-          <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.05 } } }} className="space-y-2.5">
-            {accounts.map((a) => { const m = roleMeta[a.role] || roleMeta.student; return (
-              <motion.li key={a.id} variants={{ h: { opacity: 0, y: 12 }, s: { opacity: 1, y: 0 } }}>
-                <button onClick={() => onPick(a)} className="group flex w-full items-center gap-4 rounded-xl2 border border-line bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lift">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl font-display text-lg font-700 text-white" style={{ background: m.tone }}>{initials(a.name)}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-700">{a.name}</span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted">
-                      <span className="inline-flex items-center gap-1 font-600" style={{ color: m.tone }}>{m.icon}{m.label}</span>
-                      {a.school && <span>· {a.school}</span>}{a.class && <span>· {a.class}</span>}
-                    </span>
-                  </span>
-                  <Icons.chevR className="shrink-0 text-line transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
-                </button>
-              </motion.li>
-            ); })}
-          </motion.ul>
-        )}
-        {accounts && accounts.length === 1 && (
-          <p className="mt-5 rounded-xl bg-brand-50 p-3 text-[13px] text-brand-700">Deocamdată există doar contul de administrator. Intră ca Administrator și adaugă școli, profesori și elevi — apoi vor apărea aici.</p>
-        )}
+        <div className="rounded-xl2 border border-line bg-white p-6 shadow-card">{children}</div>
       </div>
     </div>
+  );
+}
+function FormError({ children }) {
+  return children ? <p role="alert" className="rounded-xl bg-heat-heavybg/70 p-3 text-[13px] text-heat-heavy">{children}</p> : null;
+}
+function Login({ onSignedIn, notice }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password) return setErr('Completează emailul și parola.');
+    setBusy(true); setErr(null);
+    const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) { setBusy(false); return setErr(error.status === 400 ? 'Email sau parolă greșită.' : `Nu te-am putut autentifica: ${error.message}`); }
+    try { await onSignedIn(); } catch (e2) { setBusy(false); setErr(errText(e2)); }
+  };
+  return (
+    <AuthCard sub="Intră în contul tău">
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <h1 className="font-display text-xl font-700">Autentificare</h1>
+        <FormError>{err || notice}</FormError>
+        <Field label="Email"><Input type="email" autoComplete="username" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nume@scoala.ro" /></Field>
+        <Field label="Parolă"><Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+        <ShimmerButton type="submit" className="w-full" disabled={busy}>{busy ? 'Se verifică…' : 'Intră în cont'}</ShimmerButton>
+        <p className="text-center text-[12.5px] text-muted">Conturile sunt create de administratorul școlii. Dacă ți-ai uitat parola, cere-i o resetare.</p>
+      </form>
+    </AuthCard>
+  );
+}
+function ChangePassword({ account, onDone, onLogout }) {
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (pw.length < 8) return setErr('Parola trebuie să aibă cel puțin 8 caractere.');
+    if (pw !== pw2) return setErr('Parolele nu coincid.');
+    setBusy(true); setErr(null);
+    const { error } = await sb.auth.updateUser({ password: pw, data: { must_change_password: false } });
+    if (error) { setBusy(false); return setErr(error.code === 'same_password' ? 'Parola nouă trebuie să fie diferită de cea temporară.' : `Nu am putut schimba parola: ${error.message}`); }
+    await sb.auth.refreshSession(); // new token, so the server sees the cleared flag right away
+    try { await onDone(); } catch (e2) { setBusy(false); setErr(errText(e2)); }
+  };
+  return (
+    <AuthCard sub={account.email}>
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <div><h1 className="font-display text-xl font-700">Setează o parolă nouă</h1><p className="mt-1 text-[13px] text-muted">Ai intrat cu o parolă temporară. Alege una nouă, doar a ta, ca să continui.</p></div>
+        <FormError>{err}</FormError>
+        <Field label="Parolă nouă"><Input type="password" autoComplete="new-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="minim 8 caractere" /></Field>
+        <Field label="Repetă parola"><Input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
+        <ShimmerButton type="submit" className="w-full" disabled={busy}>{busy ? 'Se salvează…' : 'Salvează parola'}</ShimmerButton>
+        <button type="button" onClick={onLogout} className="w-full text-center text-[13px] font-700 text-muted hover:text-ink">Ieși din cont</button>
+      </form>
+    </AuthCard>
   );
 }
 
@@ -394,7 +439,7 @@ function Shell({ account, nav, view, setView, onLogout, children }) {
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 font-700 text-brand-600 text-[13px]">{initials(account.name)}</span>
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[13px] font-700">{account.name}</span><span className="block truncate text-[11px] text-muted">{account.school || roleLabel}</span></span>
               </div>
-              <button onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.logout size={17} /> Schimbă contul</button>
+              <button onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.logout size={17} /> Ieși din cont</button>
             </div>
           </aside>
 
@@ -534,23 +579,78 @@ function AdminClasses({ school, reload }) {
   );
 }
 
+/* Temporary password, shown to the admin exactly once (after create or reset). */
+function TempPassword({ issued, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
+    if (navigator.clipboard) navigator.clipboard.writeText(issued.tempPassword).then(done).catch(() => {});
+  };
+  return (
+    <Sheet open={!!issued} onClose={onClose} labelledBy="tp-t">
+      {issued && <Modal>
+        <h3 id="tp-t" className="font-display text-xl font-700">{issued.title}</h3>
+        <p className="mt-1 text-sm text-muted">Parola temporară pentru <b className="text-ink">{issued.email}</b>:</p>
+        <div className="mt-3 flex items-center gap-2">
+          <code className="flex-1 select-all rounded-xl border border-line bg-paper px-3 py-2.5 font-mono text-lg font-700 tracking-wide">{issued.tempPassword}</code>
+          <button onClick={copy} className="inline-flex items-center gap-1.5 rounded-xl border border-line px-3 py-2.5 text-sm font-700 text-ink hover:bg-paper"><Icons.copy size={16} />{copied ? 'Copiat' : 'Copiază'}</button>
+        </div>
+        <p className="mt-3 rounded-xl bg-heat-lightbg/60 p-3 text-[13px] text-ink/80">Parola apare o singură dată. Trimite-o persoanei; la prima autentificare va trebui să își aleagă una nouă.</p>
+        <div className="mt-5"><ShimmerButton className="w-full" onClick={onClose}>Am salvat parola</ShimmerButton></div>
+      </Modal>}
+    </Sheet>
+  );
+}
+/* Create / reset / delete a teacher or student login. */
+function useAccounts(reload) {
+  const [issued, setIssued] = useState(null);
+  const [formErr, setFormErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const create = (path, body, done) => {
+    if (!body.name.trim()) return setFormErr('Completează numele.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email.trim())) return setFormErr('Completează un email valid.');
+    setBusy(true); setFormErr(null);
+    API.post(path, { ...body, email: body.email.trim() })
+      .then((r) => { done(); setIssued({ title: 'Cont creat', ...r }); reload(); })
+      .catch((e) => setFormErr(errText(e)))
+      .finally(() => setBusy(false));
+  };
+  const reset = (u) => {
+    if (!confirm(`Generezi o parolă temporară nouă pentru ${u.name}? Parola actuală nu va mai funcționa.`)) return;
+    API.post(`/api/users/${u.id}/reset-password`).then((r) => setIssued({ title: 'Parolă resetată', ...r })).catch((e) => alert(errText(e)));
+  };
+  const del = (u, what) => {
+    if (confirm(`Ștergi ${what} ${u.name}? Se șterge și contul de autentificare.`)) API.del(`/api/users/${u.id}`).then(reload).catch((e) => alert(errText(e)));
+  };
+  return { issued, closeIssued: () => setIssued(null), formErr, setFormErr, busy, create, reset, del };
+}
+function AccountRowActions({ u, acc, what }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {u.hasLogin && <button onClick={() => acc.reset(u)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.key size={15} /><span className="hidden sm:inline">Resetează parola</span></button>}
+      <button onClick={() => acc.del(u, what)} aria-label={`Șterge ${u.name}`} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100 focus:opacity-100"><Icons.trash size={16} /></button>
+    </div>
+  );
+}
+
 function AdminTeachers({ a, school, reload }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [subs, setSubs] = useState([]);
-  const add = () => { if (!name.trim()) return; API.post('/api/teachers', { schoolId: school.id, name, subjects: subs }).then(() => { setName(''); setSubs([]); setOpen(false); reload(); }); };
-  const del = (t) => { if (confirm(`Ștergi profesorul ${t.name}?`)) API.del(`/api/users/${t.id}`).then(reload); };
+  const acc = useAccounts(reload);
+  const add = () => acc.create('/api/teachers', { schoolId: school.id, name, email, subjects: subs }, () => { setName(''); setEmail(''); setSubs([]); setOpen(false); });
   const subjName = (code) => (a.subjects.find((s) => s.code === code) || {}).short || code;
   return (
     <div>
-      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setOpen(true)}>Adaugă profesor</ShimmerButton></div>
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => { acc.setFormErr(null); setOpen(true); }}>Adaugă profesor</ShimmerButton></div>
       {school.teachers.length === 0 ? <Empty icon={<Icons.teacher size={26} />} title="Niciun profesor" body="Adaugă profesori și materiile pe care le predau. Apoi îi poți pune în orar." />
         : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
             {school.teachers.map((t, i) => (
               <div key={t.id} className={cx('group flex items-center gap-3 p-4', i && 'border-t border-line')}>
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#7C3AED]/10 font-700 text-[#7C3AED] text-[13px]">{initials(t.name)}</span>
-                <div className="min-w-0 flex-1"><p className="truncate font-700">{t.name}</p><p className="truncate text-[12.5px] text-muted">{t.subjects.length ? t.subjects.map(subjName).join(', ') : 'fără materii'}</p></div>
-                <button onClick={() => del(t)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+                <div className="min-w-0 flex-1"><p className="truncate font-700">{t.name}</p><p className="truncate text-[12.5px] text-muted">{t.email || 'fără login'} · {t.subjects.length ? t.subjects.map(subjName).join(', ') : 'fără materii'}</p></div>
+                <AccountRowActions u={t} acc={acc} what="profesorul" />
               </div>
             ))}
           </div>}
@@ -558,12 +658,15 @@ function AdminTeachers({ a, school, reload }) {
         {open && <Modal>
           <h3 id="t-t" className="font-display text-xl font-700">Adaugă profesor</h3>
           <div className="mt-4 space-y-4">
+            <FormError>{acc.formErr}</FormError>
             <Field label="Nume"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. d-na Ionescu" /></Field>
+            <Field label="Email (pentru autentificare)"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nume@scoala.ro" /></Field>
             <div><span className="mb-1 block text-[12px] font-700 text-muted">Materii predate</span><SubjectChips subjects={a.subjects} selected={subs} toggle={(c) => setSubs((s) => s.includes(c) ? s.filter((x) => x !== c) : [...s, c])} /></div>
           </div>
-          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add} disabled={acc.busy}>{acc.busy ? 'Se creează…' : 'Salvează'}</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
         </Modal>}
       </Sheet>
+      <TempPassword issued={acc.issued} onClose={acc.closeIssued} />
     </div>
   );
 }
@@ -571,20 +674,21 @@ function AdminTeachers({ a, school, reload }) {
 function AdminStudents({ school, reload }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [classId, setClassId] = useState(school.classes[0] ? String(school.classes[0].id) : '');
-  const add = () => { if (!name.trim()) return; API.post('/api/students', { schoolId: school.id, name, classId: classId ? Number(classId) : null }).then(() => { setName(''); setOpen(false); reload(); }); };
-  const del = (s) => { if (confirm(`Ștergi elevul ${s.name}?`)) API.del(`/api/users/${s.id}`).then(reload); };
+  const acc = useAccounts(reload);
+  const add = () => acc.create('/api/students', { schoolId: school.id, name, email, classId: classId ? Number(classId) : null }, () => { setName(''); setEmail(''); setOpen(false); });
   return (
     <div>
-      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => { setClassId(school.classes[0] ? String(school.classes[0].id) : ''); setOpen(true); }}>Adaugă elev</ShimmerButton></div>
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => { setClassId(school.classes[0] ? String(school.classes[0].id) : ''); acc.setFormErr(null); setOpen(true); }}>Adaugă elev</ShimmerButton></div>
       {school.classes.length === 0 && <p className="mb-3 rounded-xl bg-heat-lightbg/60 p-3 text-[13px] text-heat-light">Adaugă întâi o clasă, ca să poți repartiza elevii.</p>}
       {school.students.length === 0 ? <Empty icon={<Icons.user size={26} />} title="Niciun elev" body="Adaugă elevi și repartizează-i la o clasă. Fiecare elev va avea propriul cont." />
         : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
             {school.students.map((s, i) => (
               <div key={s.id} className={cx('group flex items-center gap-3 p-4', i && 'border-t border-line')}>
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#E8650E]/10 font-700 text-[#E8650E] text-[13px]">{initials(s.name)}</span>
-                <div className="min-w-0 flex-1"><p className="truncate font-700">{s.name}</p><p className="text-[12.5px] text-muted">{s.className || 'fără clasă'}</p></div>
-                <button onClick={() => del(s)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+                <div className="min-w-0 flex-1"><p className="truncate font-700">{s.name}</p><p className="truncate text-[12.5px] text-muted">{s.email || 'fără login'} · {s.className || 'fără clasă'}</p></div>
+                <AccountRowActions u={s} acc={acc} what="elevul" />
               </div>
             ))}
           </div>}
@@ -592,12 +696,15 @@ function AdminStudents({ school, reload }) {
         {open && <Modal>
           <h3 id="s-t" className="font-display text-xl font-700">Adaugă elev</h3>
           <div className="mt-4 space-y-4">
+            <FormError>{acc.formErr}</FormError>
             <Field label="Nume"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Ana Popescu" /></Field>
+            <Field label="Email (pentru autentificare)"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nume@scoala.ro" /></Field>
             <Field label="Clasă"><select value={classId} onChange={(e) => setClassId(e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand"><option value="">— fără clasă —</option>{school.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
           </div>
-          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add} disabled={acc.busy}>{acc.busy ? 'Se creează…' : 'Salvează'}</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
         </Modal>}
       </Sheet>
+      <TempPassword issued={acc.issued} onClose={acc.closeIssued} />
     </div>
   );
 }
@@ -664,7 +771,7 @@ function TeacherApp({ account, onLogout }) {
   const [view, setView] = useState('schedule');
   const [t, setT] = useState(null);
   const [err, setErr] = useState(null);
-  const load = useCallback(() => API.get(`/api/teacher?userId=${account.id}`).then((d) => { setErr(null); setT(d); }).catch((e) => setErr(errText(e))), [account.id]);
+  const load = useCallback(() => API.get('/api/teacher').then((d) => { setErr(null); setT(d); }).catch((e) => setErr(errText(e))), [account.id]);
   useEffect(() => { load(); }, [load]);
   const nav = [{ id: 'schedule', label: 'Orarul meu', icon: Icons.grid }, { id: 'workload', label: 'Încărcare', icon: Icons.pulse }];
   return (
@@ -744,7 +851,7 @@ function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) 
   const [type, setType] = useState('test');
   const [dateISO, setDateISO] = useState('');
   const [title, setTitle] = useState('');
-  const save = () => { if (!subject || !dateISO) return; API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type], teacherId: t.teacher.id }).then(onSaved); };
+  const save = () => { if (!subject || !dateISO) return; API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type] }).then(onSaved); };
   return (
     <Modal>
       <h3 id="a-t" className="font-display text-xl font-700">Programează o evaluare · {className}</h3>
@@ -772,7 +879,7 @@ function StudentApp({ account, onLogout }) {
   const [view, setView] = useState('today');
   const [s, setS] = useState(null);
   const [err, setErr] = useState(null);
-  const load = useCallback(() => API.get(`/api/student?userId=${account.id}`).then((d) => { setErr(null); setS(d); }).catch((e) => setErr(errText(e))), [account.id]);
+  const load = useCallback(() => API.get('/api/student').then((d) => { setErr(null); setS(d); }).catch((e) => setErr(errText(e))), [account.id]);
   useEffect(() => { load(); }, [load]);
   const nav = [{ id: 'today', label: 'Azi', icon: Icons.sun }, { id: 'timetable', label: 'Orar', icon: Icons.grid }, { id: 'marks', label: 'Catalog', icon: Icons.chart }];
   return (
@@ -793,7 +900,7 @@ function StudentToday({ s, reload, onGoto }) {
   const [draft, setDraft] = useState('');
   const stagger = (i) => reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.05 + i * 0.07, ...spring } };
   const toggle = (task) => API.patch(`/api/tasks/${task.id}`, { done: !task.done }).then(reload);
-  const addTask = () => { const title = draft.trim(); if (!title) { setAdding(false); return; } setDraft(''); setAdding(false); API.post('/api/tasks', { studentId: s.student.id, title, type: 'tema', due: todayISO() }).then(reload); };
+  const addTask = () => { const title = draft.trim(); if (!title) { setAdding(false); return; } setDraft(''); setAdding(false); API.post('/api/tasks', { title, type: 'tema', due: todayISO() }).then(reload); };
   if (!s.student.classId) return <div><ViewHead title={`Bună, ${s.student.name.split(' ')[0]}`} icon={<Icons.sun />} /><Empty icon={<Icons.sun size={26} />} title="Încă nu ești într-o clasă" body="Administratorul te repartizează la o clasă și îți adaugă orarul. Apoi aici apare rezumatul zilei tale." /></div>;
   return (
     <div>
@@ -921,7 +1028,7 @@ function GradesPanel({ s, reload }) {
 function AddGrade({ s, subjects, onClose, onSaved }) {
   const [subject, setSubject] = useState('');
   const [value, setValue] = useState(8);
-  const save = () => { if (!subject) return; API.post('/api/grades', { studentId: s.student.id, subject, value }).then(onSaved); };
+  const save = () => { if (!subject) return; API.post('/api/grades', { subject, value }).then(onSaved); };
   return (
     <Modal>
       <h3 id="ag-t" className="font-display text-xl font-700">Adaugă o notă</h3>
@@ -937,7 +1044,7 @@ function WhatINeed({ s, subject, avg, reload }) {
   const [target, setTarget] = useState(Math.min(10, Math.ceil(avg) + 1));
   const [n, setN] = useState(1);
   const [res, setRes] = useState(null);
-  useEffect(() => { const id = setTimeout(() => { API.post('/api/grades/what-if', { studentId: s.student.id, subject, target, n }).then(setRes); }, 160); return () => clearTimeout(id); }, [subject, target, n]);
+  useEffect(() => { const id = setTimeout(() => { API.post('/api/grades/what-if', { subject, target, n }).then(setRes); }, 160); return () => clearTimeout(id); }, [subject, target, n]);
   return (
     <div>
       <p className="flex items-center gap-2 text-sm font-700"><Icons.target size={16} className="text-brand" /> De ce notă ai nevoie?</p>
@@ -985,7 +1092,7 @@ function AbsencesPanel({ s, reload }) {
 function AddAbsence({ s, subjects, onClose, onSaved }) {
   const [subject, setSubject] = useState('');
   const [kind, setKind] = useState('unexcused');
-  const save = () => { if (!subject) return; API.post('/api/absences', { studentId: s.student.id, subject, kind }).then(onSaved); };
+  const save = () => { if (!subject) return; API.post('/api/absences', { subject, kind }).then(onSaved); };
   return (
     <Modal>
       <h3 id="ab-t" className="font-display text-xl font-700">Adaugă o absență</h3>
@@ -1002,21 +1109,34 @@ function AddAbsence({ s, subjects, onClose, onSaved }) {
  *  ROOT
  * ===================================================================== */
 function Root() {
-  const [account, setAccount] = useState(() => { try { return JSON.parse(localStorage.getItem('sp_user') || 'null'); } catch (e) { return null; } });
-  const pick = (a) => { setAccount(a); try { localStorage.setItem('sp_user', JSON.stringify(a)); } catch (e) {} };
-  const logout = () => { setAccount(null); try { localStorage.removeItem('sp_user'); } catch (e) {} };
-  // A saved account may have been deleted (or the DB reset) since last visit: check it still exists.
-  // If the server can't be reached, carry on and let the view show its own load error.
-  const [checked, setChecked] = useState(!account);
+  const [phase, setPhase] = useState('boot'); // boot | login | change | app | error
+  const [account, setAccount] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const toLogin = (msg) => { setAccount(null); setNotice(msg || null); setPhase('login'); };
+  const logout = async () => { try { await sb.auth.signOut(); } catch (e) {} toLogin(); };
+  // Who am I? Identity comes from the Supabase session token, checked by the server.
+  const loadMe = async () => {
+    try {
+      const me = await API.get('/api/me');
+      setAccount(me); setNotice(null); setPhase(me.mustChangePassword ? 'change' : 'app');
+    } catch (e) {
+      await sb.auth.signOut().catch(() => {});
+      throw e;
+    }
+  };
   useEffect(() => {
-    if (checked) return;
-    API.get('/api/accounts')
-      .then((d) => { if (!d.accounts.some((x) => x.id === account.id && x.role === account.role && x.name === account.name)) logout(); })
-      .catch(() => {})
-      .finally(() => setChecked(true));
+    onUnauthorized = () => { if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.'); };
+    fetch('/api/config').then((r) => r.json()).then(async (cfg) => {
+      sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
+      const { data } = await sb.auth.getSession();
+      if (!data.session) return toLogin();
+      loadMe().catch((e) => toLogin(errText(e)));
+    }).catch((e) => { setNotice(errText(e)); setPhase('error'); });
   }, []);
-  if (!checked) return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
-  if (!account) return <Login onPick={pick} />;
+  if (phase === 'boot') return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
+  if (phase === 'error') return <AuthCard sub="Autentificare"><FormError>Nu pot contacta serverul: {notice}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</FormError></AuthCard>;
+  if (phase === 'login' || !account) return <Login onSignedIn={loadMe} notice={notice} />;
+  if (phase === 'change') return <ChangePassword account={account} onDone={loadMe} onLogout={logout} />;
   if (account.role === 'admin') return <AdminApp account={account} onLogout={logout} />;
   if (account.role === 'teacher') return <TeacherApp account={account} onLogout={logout} />;
   return <StudentApp account={account} onLogout={logout} />;
