@@ -12,7 +12,12 @@ Full-stack, zero dependencies: a Python backend (SQLite + REST API) and a React 
 
 ## Run it
 
-**Requirements:** Python 3.8+ only. No `pip install`, no Node, no build step.
+**Requirements:** Python 3.8+ and a Supabase project (for login). No `pip install`, no Node, no build step.
+
+Copy `.env.example` to `.env` and fill in `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
+`SUPABASE_SECRET_KEY` (server-only, never commit it) and `ADMIN_EMAIL`. Create the admin
+user in Supabase Auth with that email and **disable public sign-ups** — the admin creates
+every other account from the app.
 
 ```bash
 python3 server.py            # → http://localhost:8000
@@ -30,11 +35,13 @@ and nothing else — you build the rest.
 
 ## First run (how to test everything)
 
-1. **Log in as `Administrator`** (the only account at first).
+1. **Log in with the admin email and password** (the only account at first).
 2. **Add a school** → open it.
 3. **Clase** → add a class (e.g. `10B`).
-4. **Profesori** → add a teacher, tick the subjects they teach.
-5. **Elevi** → add a student, assign them to the class.
+4. **Profesori** → add a teacher with their email, tick the subjects they teach. The app
+   shows a **temporary password once** — pass it on; they must set their own at first login.
+5. **Elevi** → add a student (with email), assign them to the class. **Resetează parola**
+   issues a new temporary password.
 6. **Orar** → pick the class, tap cells to place subject + teacher + room.
 7. **Log out → log in as the teacher**: see only your own lessons, open **Încărcare**,
    and **schedule a test** — the app suggests the class's calmest days; two graded
@@ -95,7 +102,7 @@ schoolpilot/
   keyboard focus, mobile bottom-nav. UI follows the [Watermelon UI](https://ui.watermelon.sh) idiom.
 
 ### Not in this build
-No passwords (the login is an account picker — add real auth later), and no
+No self-service password reset by email (the admin resets passwords), and no
 messaging/announcements. Grades & absences have no teacher-entry flow yet (students
 can add them to test the calculator).
 
