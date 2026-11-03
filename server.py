@@ -382,10 +382,18 @@ def build_absences(con, student_id):
     return {"totUn": tu, "totEx": te, "threshold": 10, "subjects": subs}
 
 def what_if(values, target, n):
+    """Minimum whole grade (1-10), given n times, so the average rounds to `target`.
+
+    Romanian averages round half-up to a whole number, so target T needs a raw
+    average >= T - 0.5:  (sum + g*n) / total >= (2T - 1) / 2.  Integer maths
+    avoids float edge cases at exactly x.50.
+    """
     n = max(1, int(n))
+    target = int(target)
     total = len(values) + n
-    need = (target * total - sum(values)) / n
-    return {"need": round(need + 0.004, 2), "reachable": need <= 10, "trivial": need <= 1}
+    num = (2 * target - 1) * total - 2 * sum(values)
+    need = -(-num // (2 * n))  # ceil
+    return {"need": min(10, max(1, need)), "reachable": need <= 10, "trivial": need <= 1}
 
 # --------------------------------------------------------------------------- #
 #  HTTP
