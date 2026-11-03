@@ -189,6 +189,15 @@ function Spinner({ size = 16 }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity=".25" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
   </motion.span>;
 }
+function LoadFailed({ err, retry }) {
+  return (
+    <div className="rounded-xl border border-heat-heavy/30 bg-white p-4 text-sm text-heat-heavy">
+      Nu am putut încărca datele: {err}.{' '}
+      <button onClick={retry} className="font-700 underline hover:text-ink">Reîncearcă</button>
+    </div>
+  );
+}
+const errText = (e) => String((e && e.message) || e);
 function ViewHead({ title, sub, icon, right, bare }) {
   return (
     <div className={cx('flex items-end justify-between gap-3', !bare && 'mb-4')}>
@@ -425,9 +434,10 @@ function AdminApp({ account, onLogout }) {
   const [view] = useState('admin');
   const [schoolId, setSchoolId] = useState(null);
   const [tab, setTab] = useState('classes');
-  const load = useCallback(() => API.get('/api/admin').then(setA), []);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => API.get('/api/admin').then((d) => { setErr(null); setA(d); }).catch((e) => setErr(errText(e))), []);
   useEffect(() => { load(); }, [load]);
-  if (!a) return <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view="admin" setView={() => {}} onLogout={onLogout}><div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div></Shell>;
+  if (!a) return <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view="admin" setView={() => {}} onLogout={onLogout}>{err ? <div className="p-6"><LoadFailed err={err} retry={load} /></div> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>}</Shell>;
   const school = a.schools.find((s) => s.id === schoolId) || null;
   return (
     <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view={view} setView={() => {}} onLogout={onLogout}>
@@ -596,7 +606,8 @@ function AdminTimetable({ a, school, reload }) {
   const [classId, setClassId] = useState(school.classes[0] ? school.classes[0].id : null);
   const [tt, setTt] = useState(null);
   const [edit, setEdit] = useState(null); // {day, period, cell}
-  const loadTT = useCallback(() => { if (classId) API.get(`/api/timetable?classId=${classId}`).then(setTt); }, [classId]);
+  const [err, setErr] = useState(null);
+  const loadTT = useCallback(() => { if (classId) API.get(`/api/timetable?classId=${classId}`).then((d) => { setErr(null); setTt(d); }).catch((e) => setErr(errText(e))); }, [classId]);
   useEffect(() => { loadTT(); }, [loadTT]);
   if (school.classes.length === 0) return <Empty icon={<Icons.grid size={26} />} title="Fără orar încă" body="Adaugă o clasă întâi, apoi construiește orarul oră cu oră." />;
   const grid = tt ? { periods: tt.periods, todayIdx: tt.todayIdx, days: tt.grid[0].map((_, pi) => null) && [0, 1, 2, 3, 4].map((di) => tt.grid[di]) } : null;
@@ -607,7 +618,7 @@ function AdminTimetable({ a, school, reload }) {
         {school.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1 transition-colors', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
       </div>
       <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi ora. Punct roșu = are o evaluare programată de profesor.</p>
-      {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell) => setEdit({ day, period, cell })} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell) => setEdit({ day, period, cell })} /> : err ? <LoadFailed err={err} retry={loadTT} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
       <Sheet open={!!edit} onClose={() => setEdit(null)} labelledBy="tt-e">
         {edit && <TimetableCellEditor a={a} school={school} classId={classId} edit={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); loadTT(); reload(); }} />}
       </Sheet>
@@ -652,13 +663,14 @@ const TYPE_LABEL = { test: 'Lucrare', quiz: 'Ascultare', tema: 'Temă' };
 function TeacherApp({ account, onLogout }) {
   const [view, setView] = useState('schedule');
   const [t, setT] = useState(null);
-  const load = useCallback(() => API.get(`/api/teacher?userId=${account.id}`).then(setT), [account.id]);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => API.get(`/api/teacher?userId=${account.id}`).then((d) => { setErr(null); setT(d); }).catch((e) => setErr(errText(e))), [account.id]);
   useEffect(() => { load(); }, [load]);
   const nav = [{ id: 'schedule', label: 'Orarul meu', icon: Icons.grid }, { id: 'workload', label: 'Încărcare', icon: Icons.pulse }];
   return (
     <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-        {!t ? <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>
+        {!t ? (err ? <LoadFailed err={err} retry={load} /> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>)
           : view === 'schedule' ? <TeacherSchedule t={t} /> : <TeacherWorkload t={t} />}
       </div>
     </Shell>
@@ -694,7 +706,8 @@ function TeacherWorkload({ t }) {
   const [classId, setClassId] = useState(t.classes[0] ? t.classes[0].id : null);
   const [wl, setWl] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
-  const load = useCallback(() => { if (classId) API.get(`/api/teacher/workload?classId=${classId}`).then(setWl); }, [classId]);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => { if (classId) API.get(`/api/teacher/workload?classId=${classId}`).then((d) => { setErr(null); setWl(d); }).catch((e) => setErr(errText(e))); }, [classId]);
   useEffect(() => { load(); }, [load]);
   if (t.classes.length === 0) return <div><ViewHead title="Încărcare" sub="Harta evaluărilor pe clasă" icon={<Icons.pulse />} /><Empty icon={<Icons.pulse size={26} />} title="Nicio clasă" body="Vei vedea harta de încărcare după ce ai ore în orar." /></div>;
   const myClass = t.classes.find((c) => c.id === classId);
@@ -715,7 +728,7 @@ function TeacherWorkload({ t }) {
           </div>
         </div>
       )}
-      {wl ? <Heatmap wl={wl} typeLabel={TYPE_LABEL} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      {wl ? <Heatmap wl={wl} typeLabel={TYPE_LABEL} /> : err ? <LoadFailed err={err} retry={load} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
       <ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="mt-4 w-full sm:hidden">Programează o lucrare</ShimmerButton>
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="a-t">
         {addOpen && <ScheduleTest t={t} classId={classId} className={myClass.name} suggestions={wl ? wl.suggestions : []} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); load(); }} />}
@@ -756,13 +769,14 @@ function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) 
 function StudentApp({ account, onLogout }) {
   const [view, setView] = useState('today');
   const [s, setS] = useState(null);
-  const load = useCallback(() => API.get(`/api/student?userId=${account.id}`).then(setS), [account.id]);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => API.get(`/api/student?userId=${account.id}`).then((d) => { setErr(null); setS(d); }).catch((e) => setErr(errText(e))), [account.id]);
   useEffect(() => { load(); }, [load]);
   const nav = [{ id: 'today', label: 'Azi', icon: Icons.sun }, { id: 'timetable', label: 'Orar', icon: Icons.grid }, { id: 'marks', label: 'Catalog', icon: Icons.chart }];
   return (
     <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-        {!s ? <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>
+        {!s ? (err ? <LoadFailed err={err} retry={load} /> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>)
           : view === 'today' ? <StudentToday s={s} reload={load} onGoto={setView} />
           : view === 'timetable' ? <StudentTimetable s={s} />
           : <StudentMarks s={s} reload={load} />}
@@ -987,6 +1001,17 @@ function Root() {
   const [account, setAccount] = useState(() => { try { return JSON.parse(localStorage.getItem('sp_user') || 'null'); } catch (e) { return null; } });
   const pick = (a) => { setAccount(a); try { localStorage.setItem('sp_user', JSON.stringify(a)); } catch (e) {} };
   const logout = () => { setAccount(null); try { localStorage.removeItem('sp_user'); } catch (e) {} };
+  // A saved account may have been deleted (or the DB reset) since last visit: check it still exists.
+  // If the server can't be reached, carry on and let the view show its own load error.
+  const [checked, setChecked] = useState(!account);
+  useEffect(() => {
+    if (checked) return;
+    API.get('/api/accounts')
+      .then((d) => { if (!d.accounts.some((x) => x.id === account.id && x.role === account.role && x.name === account.name)) logout(); })
+      .catch(() => {})
+      .finally(() => setChecked(true));
+  }, []);
+  if (!checked) return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
   if (!account) return <Login onPick={pick} />;
   if (account.role === 'admin') return <AdminApp account={account} onLogout={logout} />;
   if (account.role === 'teacher') return <TeacherApp account={account} onLogout={logout} />;
