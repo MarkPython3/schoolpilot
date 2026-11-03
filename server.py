@@ -10,11 +10,16 @@ students, timetable) through the API.
 Run:  python3 server.py            # http://localhost:8000
 Env:  PORT=8000  DB=schoolpilot.db
 """
+import base64
 import json
 import os
 import re
+import secrets
 import sqlite3
 import threading
+import time
+import urllib.error
+import urllib.request
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
@@ -104,7 +109,8 @@ CREATE TABLE IF NOT EXISTS classes (
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, name TEXT NOT NULL,
-  school_id INTEGER, class_id INTEGER, subjects TEXT NOT NULL DEFAULT '[]'
+  school_id INTEGER, class_id INTEGER, subjects TEXT NOT NULL DEFAULT '[]',
+  email TEXT, auth_id TEXT
 );
 CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
@@ -134,10 +140,173 @@ CREATE TABLE IF NOT EXISTS tasks (
 def init_db():
     con = connect()
     con.executescript(SCHEMA)
+    cols = [r["name"] for r in con.execute("PRAGMA table_info(users)").fetchall()]
+    for col in ("email", "auth_id"):  # databases created before login existed
+        if col not in cols:
+            con.execute("ALTER TABLE users ADD COLUMN %s TEXT" % col)
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email)")
     if not con.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
         con.execute("INSERT INTO users(role,name) VALUES('admin','Administrator')")
+    if ADMIN_EMAIL:
+        con.execute("UPDATE users SET email=? WHERE role='admin'", (ADMIN_EMAIL,))
     con.commit()
     con.close()
+
+# --------------------------------------------------------------------------- #
+#  Auth (Supabase Auth over plain urllib)
+# --------------------------------------------------------------------------- #
+class HttpError(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code, self.msg = code, msg
+
+def supabase(method, path, body=None, bearer=None):
+    """Call Supabase Auth. With `bearer` it acts as that user (publishable key);
+    without, it is an Admin API call authorised by the secret key alone (the
+    gateway turns the `apikey` header into the Authorization it needs)."""
+    headers = {"Content-Type": "application/json"}
+    if bearer:
+        headers["apikey"] = SUPABASE_PUBLISHABLE_KEY
+        headers["Authorization"] = "Bearer " + bearer
+    else:
+        headers["apikey"] = SUPABASE_SECRET_KEY
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(SUPABASE_URL + path, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            raw = r.read()
+            return r.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read() or b"{}")
+        except ValueError:
+            return e.code, {}
+    except (urllib.error.URLError, OSError):
+        raise HttpError(503, "Serviciul de autentificare nu răspunde. Încearcă din nou.")
+
+TOKEN_TTL = 180  # seconds a validated access token is trusted without asking Supabase again
+_token_cache = {}  # token -> (expires_at, {"auth_id", "email", "must_change"})
+_token_lock = threading.Lock()
+
+def _jwt_exp(token):
+    try:
+        part = token.split(".")[1]
+        return float(json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))["exp"])
+    except Exception:
+        return 0.0
+
+def token_identity(token):
+    now = time.time()
+    with _token_lock:
+        hit = _token_cache.get(token)
+    if hit and hit[0] > now:
+        return hit[1]
+    status, u = supabase("GET", "/auth/v1/user", bearer=token)
+    if status != 200 or not u.get("email"):
+        raise HttpError(401, "Sesiunea a expirat. Intră din nou în cont.")
+    info = {"auth_id": u["id"], "email": u["email"].lower(),
+            "must_change": bool((u.get("user_metadata") or {}).get("must_change_password"))}
+    with _token_lock:
+        if len(_token_cache) > 1000:
+            for k in [k for k, v in _token_cache.items() if v[0] <= now]:
+                del _token_cache[k]
+        _token_cache[token] = (min(now + TOKEN_TTL, _jwt_exp(token) or now + TOKEN_TTL), info)
+    return info
+
+def forget_email(email):
+    """Drop cached tokens for an account (after a reset or delete)."""
+    with _token_lock:
+        for k in [k for k, v in _token_cache.items() if v[1]["email"] == email]:
+            del _token_cache[k]
+
+_PW_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+def temp_password():
+    while True:
+        pw = "-".join("".join(secrets.choice(_PW_CHARS) for _ in range(4)) for _ in range(3))
+        if re.search(r"[a-z]", pw) and re.search(r"[A-Z]", pw) and re.search(r"\d", pw):
+            return pw
+
+def _sb_error(status, payload, what):
+    if payload.get("error_code") == "email_exists" or status == 422 and "already" in json.dumps(payload):
+        return HttpError(400, "Există deja un cont cu acest email.")
+    return HttpError(502, "%s (Supabase %d: %s)" % (what, status, payload.get("msg") or payload.get("message") or "eroare"))
+
+def create_auth_user(email, name):
+    pw = temp_password()
+    status, u = supabase("POST", "/auth/v1/admin/users", {
+        "email": email, "password": pw, "email_confirm": True,
+        "user_metadata": {"name": name, "must_change_password": True}})
+    if status not in (200, 201) or not u.get("id"):
+        raise _sb_error(status, u, "Nu am putut crea contul")
+    return u["id"], pw
+
+def reset_auth_password(auth_id):
+    pw = temp_password()
+    status, u = supabase("PUT", "/auth/v1/admin/users/%s" % auth_id, {
+        "password": pw, "user_metadata": {"must_change_password": True}})
+    if status != 200:
+        raise _sb_error(status, u, "Nu am putut reseta parola")
+    return pw
+
+def delete_auth_user(auth_id):
+    if not auth_id:
+        return
+    status, u = supabase("DELETE", "/auth/v1/admin/users/%s" % auth_id)
+    if status not in (200, 204, 404):
+        raise _sb_error(status, u, "Nu am putut șterge contul")
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+def add_account(con, role, name, email, school_id, class_id=None, subjects=None):
+    """Create the Supabase user first, then the local row; undo Supabase if the insert fails."""
+    name, email = (name or "").strip(), (email or "").strip().lower()
+    if not name:
+        raise HttpError(400, "Numele este obligatoriu.")
+    if not EMAIL_RE.match(email):
+        raise HttpError(400, "Emailul nu este valid.")
+    if con.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+        raise HttpError(400, "Există deja un cont cu acest email.")
+    auth_id, pw = create_auth_user(email, name)
+    try:
+        cur = con.execute("INSERT INTO users(role,name,school_id,class_id,subjects,email,auth_id) VALUES(?,?,?,?,?,?,?)",
+                          (role, name, school_id, class_id, json.dumps(subjects or []), email, auth_id))
+    except Exception:
+        delete_auth_user(auth_id)
+        raise
+    return {"id": cur.lastrowid, "email": email, "tempPassword": pw}
+
+def remove_users(con, rows):
+    """Delete users (never the admin) in Supabase and locally, with their own data."""
+    for r in rows:
+        if r["role"] == "admin":
+            raise HttpError(400, "Contul de administrator nu poate fi șters.")
+    for r in rows:
+        delete_auth_user(r["auth_id"])
+        if r["email"]:
+            forget_email(r["email"])
+        uid = r["id"]
+        for t in ("grades", "absences", "tasks"):
+            con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
+        con.execute("UPDATE timetable SET teacher_id=NULL WHERE teacher_id=?", (uid,))
+        con.execute("UPDATE assessments SET teacher_id=NULL WHERE teacher_id=?", (uid,))
+        con.execute("DELETE FROM users WHERE id=?", (uid,))
+
+def teacher_class_ids(con, uid):
+    return [r["class_id"] for r in con.execute("SELECT DISTINCT class_id FROM timetable WHERE teacher_id=?", (uid,)).fetchall()]
+
+def need(me, *roles):
+    if me["role"] not in roles:
+        raise HttpError(403, "Nu ai acces la această acțiune.")
+
+def need_class(con, me, cid):
+    if me["role"] == "admin":
+        return
+    if me["role"] == "teacher" and cid in teacher_class_ids(con, me["id"]):
+        return
+    if me["role"] == "student" and me["class_id"] == cid:
+        return
+    raise HttpError(403, "Nu ai acces la această clasă.")
 
 # --------------------------------------------------------------------------- #
 #  Serializers / derived
@@ -182,15 +351,12 @@ def teacher_name(con, tid):
     r = con.execute("SELECT name FROM users WHERE id=?", (tid,)).fetchone()
     return r["name"] if r else None
 
-# ---- accounts (login picker) ----
-def build_accounts(con):
-    out = []
-    for r in con.execute("SELECT * FROM users ORDER BY role, id").fetchall():
-        acc = {"id": r["id"], "role": r["role"], "name": r["name"],
-               "school": school_name(con, r["school_id"]) if r["school_id"] else None,
-               "class": class_name(con, r["class_id"]) if r["class_id"] else None}
-        out.append(acc)
-    return out
+# ---- the signed-in account ----
+def build_me(con, me, must_change):
+    return {"id": me["id"], "role": me["role"], "name": me["name"], "email": me["email"],
+            "school": school_name(con, me["school_id"]) if me["school_id"] else None,
+            "class": class_name(con, me["class_id"]) if me["class_id"] else None,
+            "mustChangePassword": must_change}
 
 # ---- admin snapshot ----
 def build_admin(con):
@@ -201,10 +367,11 @@ def build_admin(con):
                     "students": con.execute("SELECT COUNT(*) n FROM users WHERE role='student' AND class_id=?", (c["id"],)).fetchone()["n"],
                     "slots": con.execute("SELECT COUNT(*) n FROM timetable WHERE class_id=?", (c["id"],)).fetchone()["n"]}
                    for c in con.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()]
-        teachers = [{"id": t["id"], "name": t["name"], "subjects": json.loads(t["subjects"] or "[]")}
+        teachers = [{"id": t["id"], "name": t["name"], "subjects": json.loads(t["subjects"] or "[]"),
+                     "email": t["email"], "hasLogin": bool(t["auth_id"])}
                     for t in con.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (sid,)).fetchall()]
         students = [{"id": u["id"], "name": u["name"], "classId": u["class_id"],
-                     "className": class_name(con, u["class_id"])}
+                     "className": class_name(con, u["class_id"]), "email": u["email"], "hasLogin": bool(u["auth_id"])}
                     for u in con.execute("SELECT * FROM users WHERE role='student' AND school_id=? ORDER BY name", (sid,)).fetchall()]
         schools.append({"id": sid, "name": s["name"], "classes": classes,
                         "teachers": teachers, "students": students})
@@ -475,18 +642,50 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _me(self, con, p):
+        """The local user behind the request's Supabase access token.
+        Identity comes only from the token; ids in the request are never trusted."""
+        h = self.headers.get("Authorization", "")
+        if not h.startswith("Bearer ") or not h[7:].strip():
+            raise HttpError(401, "Autentificare necesară.")
+        info = token_identity(h[7:].strip())
+        me = con.execute("SELECT * FROM users WHERE email=?", (info["email"],)).fetchone()
+        if not me:
+            raise HttpError(403, "Acest email nu are cont în SchoolPilot.")
+        if me["role"] == "admin" and info["email"] != ADMIN_EMAIL:
+            raise HttpError(403, "Nu ai acces la această acțiune.")
+        if me["auth_id"] != info["auth_id"]:
+            if me["auth_id"]:  # same email, different Supabase user (e.g. recreated outside the app)
+                raise HttpError(403, "Contul nu corespunde. Cere administratorului o resetare.")
+            con.execute("UPDATE users SET auth_id=? WHERE id=?", (info["auth_id"], me["id"]))
+            con.commit()
+            me = user_row(con, me["id"])
+        if info["must_change"] and p != "/api/me":
+            raise HttpError(403, "Trebuie să îți setezi o parolă nouă.")
+        return me, info
+
+    def _api(self, fn):
+        with _lock:
+            con = connect()
+            try:
+                res = fn(con)
+                con.commit()
+                self._json(res if res is not None else {"ok": True})
+            except HttpError as e:
+                self._json({"error": e.msg}, e.code)
+            except KeyError as e:
+                self._json({"error": "missing field %s" % e}, 400)
+            except Exception as e:
+                self._json({"error": str(e)}, 400)
+            finally:
+                con.close()
+
     def do_GET(self):
         p = urlparse(self.path).path
+        if p == "/api/config":  # public: never add the secret key here
+            return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY})
         if p.startswith("/api/"):
-            with _lock:
-                con = connect()
-                try:
-                    self.get_api(p, con)
-                except Exception as e:
-                    self._json({"error": str(e)}, 400)
-                finally:
-                    con.close()
-            return
+            return self._api(lambda con: self.get_api(p, con))
         try:
             self._static()
         except Exception as e:
@@ -494,26 +693,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self, p, con):
         q = self._query()
-        if p == "/api/config":
-            return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY})
-        if p == "/api/accounts":
-            return self._json({"accounts": build_accounts(con)})
+        me, info = self._me(con, p)
+        if p == "/api/me":
+            return build_me(con, me, info["must_change"])
         if p == "/api/subjects":
-            return self._json({"subjects": subjects_catalog()})
+            return {"subjects": subjects_catalog()}
         if p == "/api/admin":
-            return self._json(build_admin(con))
+            need(me, "admin")
+            return build_admin(con)
         if p == "/api/timetable":
             cid = int(q["classId"][0])
-            return self._json({"classId": cid, "className": class_name(con, cid),
-                               "periods": PERIODS, "grid": build_timetable(con, cid),
-                               "todayIdx": today().weekday() if today().weekday() <= 4 else None})
+            need_class(con, me, cid)
+            return {"classId": cid, "className": class_name(con, cid),
+                    "periods": PERIODS, "grid": build_timetable(con, cid),
+                    "todayIdx": today().weekday() if today().weekday() <= 4 else None}
         if p == "/api/teacher":
-            return self._json(build_teacher(con, int(q["userId"][0])))
+            need(me, "teacher")
+            return build_teacher(con, me["id"])
         if p == "/api/teacher/workload":
-            return self._json(class_workload(con, int(q["classId"][0])))
+            need(me, "teacher", "admin")
+            cid = int(q["classId"][0])
+            need_class(con, me, cid)
+            return class_workload(con, cid)
         if p == "/api/student":
-            return self._json(build_student(con, int(q["userId"][0])))
-        return self._json({"error": "not found"}, 404)
+            need(me, "student")
+            return build_student(con, me["id"])
+        raise HttpError(404, "not found")
 
     def do_POST(self):
         return self._mutate("POST")
@@ -529,21 +734,13 @@ class Handler(BaseHTTPRequestHandler):
         if not p.startswith("/api/"):
             return self._json({"error": "not found"}, 404)
         body = self._body()
-        with _lock:
-            con = connect()
-            try:
-                res = self.route(method, p, body, con)
-                con.commit()
-                self._json(res if res is not None else {"ok": True})
-            except KeyError as e:
-                self._json({"error": "missing field %s" % e}, 400)
-            except Exception as e:
-                self._json({"error": str(e)}, 400)
-            finally:
-                con.close()
+        self._api(lambda con: self.route(method, p, body, con))
 
     def route(self, method, p, body, con):
         now = datetime.now().isoformat()
+        me, _ = self._me(con, p)
+        if re.match(r"^/api/(schools|classes|teachers|students|users|timetable|reset)(/|$)", p):
+            need(me, "admin")
 
         # ---------- admin: schools ----------
         if p == "/api/schools" and method == "POST":
@@ -559,7 +756,7 @@ class Handler(BaseHTTPRequestHandler):
             for cid in cids:
                 con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
                 con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
-            con.execute("DELETE FROM users WHERE school_id=?", (sid,))
+            remove_users(con, con.execute("SELECT * FROM users WHERE school_id=? AND role!='admin'", (sid,)).fetchall())
             con.execute("DELETE FROM classes WHERE school_id=?", (sid,))
             con.execute("DELETE FROM schools WHERE id=?", (sid,))
             return {"ok": True}
@@ -580,30 +777,30 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---------- admin: teachers ----------
         if p == "/api/teachers" and method == "POST":
-            cur = con.execute("INSERT INTO users(role,name,school_id,subjects) VALUES('teacher',?,?,?)",
-                              ((body["name"] or "").strip(), int(body["schoolId"]),
-                               json.dumps(body.get("subjects", []))))
-            return {"id": cur.lastrowid}
+            return add_account(con, "teacher", body.get("name"), body.get("email"), int(body["schoolId"]),
+                               subjects=body.get("subjects", []))
 
         # ---------- admin: students ----------
         if p == "/api/students" and method == "POST":
-            cur = con.execute("INSERT INTO users(role,name,school_id,class_id) VALUES('student',?,?,?)",
-                              ((body["name"] or "").strip(), int(body["schoolId"]),
-                               body.get("classId")))
-            return {"id": cur.lastrowid}
+            return add_account(con, "student", body.get("name"), body.get("email"), int(body["schoolId"]),
+                               class_id=body.get("classId"))
 
         m = re.match(r"^/api/users/(\d+)$", p)
         if m and method == "DELETE":
-            uid = int(m.group(1))
-            r = user_row(con, uid)
-            if r and r["role"] == "admin":
-                raise ValueError("cannot delete admin")
-            con.execute("DELETE FROM grades WHERE student_id=?", (uid,))
-            con.execute("DELETE FROM absences WHERE student_id=?", (uid,))
-            con.execute("DELETE FROM tasks WHERE student_id=?", (uid,))
-            con.execute("UPDATE timetable SET teacher_id=NULL WHERE teacher_id=?", (uid,))
-            con.execute("DELETE FROM users WHERE id=?", (uid,))
+            r = user_row(con, int(m.group(1)))
+            if r:
+                remove_users(con, [r])
             return {"ok": True}
+        m = re.match(r"^/api/users/(\d+)/reset-password$", p)
+        if m and method == "POST":
+            r = user_row(con, int(m.group(1)))
+            if not r or r["role"] == "admin":
+                raise HttpError(400, "Parola acestui cont nu poate fi resetată de aici.")
+            if not r["auth_id"]:
+                raise HttpError(400, "Acest cont nu are login (a fost creat fără email).")
+            pw = reset_auth_password(r["auth_id"])
+            forget_email(r["email"])
+            return {"id": r["id"], "email": r["email"], "tempPassword": pw}
 
         # ---------- admin: timetable ----------
         if p == "/api/timetable" and method == "POST":
@@ -619,53 +816,64 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---------- teacher: assessments ----------
         if p == "/api/assessments" and method == "POST":
+            need(me, "teacher")
+            cid = int(body["classId"])
+            need_class(con, me, cid)
             con.execute("INSERT INTO assessments(class_id,subject,type,date,title,teacher_id) VALUES(?,?,?,?,?,?)",
-                        (int(body["classId"]), body["subject"], body.get("type", "test"),
+                        (cid, body["subject"], body.get("type", "test"),
                          body["date"], (body.get("title") or TYPE_LABEL.get(body.get("type", "test"), "Evaluare")),
-                         body.get("teacherId")))
+                         me["id"]))
             return {"ok": True}
         m = re.match(r"^/api/assessments/(\d+)$", p)
         if m and method == "DELETE":
-            con.execute("DELETE FROM assessments WHERE id=?", (int(m.group(1)),))
+            need(me, "teacher", "admin")
+            if me["role"] == "admin":
+                con.execute("DELETE FROM assessments WHERE id=?", (int(m.group(1)),))
+            elif not con.execute("DELETE FROM assessments WHERE id=? AND teacher_id=?", (int(m.group(1)), me["id"])).rowcount:
+                raise HttpError(404, "not found")
             return {"ok": True}
 
-        # ---------- student: tasks ----------
+        # ---------- student: own tasks, grades, absences ----------
+        if re.match(r"^/api/(tasks|grades|absences)(/|$)", p):
+            need(me, "student")
         if p == "/api/tasks" and method == "POST":
             con.execute("INSERT INTO tasks(student_id,title,subject,type,due,done,created_at) VALUES(?,?,?,?,?,0,?)",
-                        (int(body["studentId"]), (body["title"] or "").strip(), body.get("subject"),
+                        (me["id"], (body["title"] or "").strip(), body.get("subject"),
                          body.get("type", "tema"), body.get("due"), now))
             return {"ok": True}
         m = re.match(r"^/api/tasks/(\d+)$", p)
-        if m and method == "PATCH":
-            con.execute("UPDATE tasks SET done=? WHERE id=?", (1 if body.get("done") else 0, int(m.group(1))))
-            return {"ok": True}
-        if m and method == "DELETE":
-            con.execute("DELETE FROM tasks WHERE id=?", (int(m.group(1)),))
+        if m and method in ("PATCH", "DELETE"):
+            tid = int(m.group(1))
+            if method == "PATCH":
+                cur = con.execute("UPDATE tasks SET done=? WHERE id=? AND student_id=?", (1 if body.get("done") else 0, tid, me["id"]))
+            else:
+                cur = con.execute("DELETE FROM tasks WHERE id=? AND student_id=?", (tid, me["id"]))
+            if not cur.rowcount:
+                raise HttpError(404, "not found")
             return {"ok": True}
 
-        # ---------- grades / absences (entry + calculator) ----------
         if p == "/api/grades" and method == "POST":
             v = int(body["value"])
             if not (1 <= v <= 10):
                 raise ValueError("grade 1..10")
             con.execute("INSERT INTO grades(student_id,subject,value,date) VALUES(?,?,?,?)",
-                        (int(body["studentId"]), body["subject"], v,
+                        (me["id"], body["subject"], v,
                          "%d %s" % (today().day, MONTHS[today().month])))
             return {"ok": True}
         if p == "/api/grades/what-if" and method == "POST":
             rows = con.execute("SELECT value FROM grades WHERE student_id=? AND subject=?",
-                               (int(body["studentId"]), body["subject"])).fetchall()
+                               (me["id"], body["subject"])).fetchall()
             return what_if([r["value"] for r in rows], float(body.get("target", 8)), int(body.get("n", 1)))
         if p == "/api/absences" and method == "POST":
             con.execute("INSERT INTO absences(student_id,subject,kind,date) VALUES(?,?,?,?)",
-                        (int(body["studentId"]), body["subject"], body.get("kind", "unexcused"), iso(today())))
+                        (me["id"], body["subject"], body.get("kind", "unexcused"), iso(today())))
             return {"ok": True}
 
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
+            remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
             for t in ["timetable", "assessments", "grades", "absences", "tasks", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
-            con.execute("DELETE FROM users WHERE role!='admin'")
             return {"ok": True}
 
         raise ValueError("unknown route %s %s" % (method, p))

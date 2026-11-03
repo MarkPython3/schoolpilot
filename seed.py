@@ -6,6 +6,7 @@ WIPES the existing data first (everything except the admin account), then adds:
 class 10B with 25 students, 8 teachers, a full Mon-Fri timetable, an upcoming
 Thursday with three tests (a collision), grades, absences and a few tasks.
 One student (Matei Constantin) has a physics average close to failing.
+Seeded people have no email, so they can't log in; they only populate the views.
 
 Run:  python3 seed.py            # same DB as server.py (env DB=... respected)
 Dates are relative to today, so re-run it before a demo.
@@ -52,6 +53,10 @@ HOMEROOM = "Sala 12"
 
 
 def wipe(con):
+    real = con.execute("SELECT COUNT(*) FROM users WHERE role!='admin' AND auth_id IS NOT NULL").fetchone()[0]
+    if real:
+        raise SystemExit("Refusing to wipe: %d accounts have a Supabase login. Delete them from the admin "
+                         "panel first (that also removes them in Supabase)." % real)
     for t in ["timetable", "assessments", "grades", "absences", "tasks", "classes", "schools"]:
         con.execute("DELETE FROM %s" % t)
     con.execute("DELETE FROM users WHERE role!='admin'")
