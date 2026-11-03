@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ro">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -832,7 +832,7 @@ function StudentToday({ s, reload, onGoto }) {
             {adding && <div className="mb-2 flex items-center gap-2"><Input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); if (e.key === 'Escape') { setAdding(false); setDraft(''); } }} placeholder="Ce ai de făcut?" /><button onClick={addTask} className="shrink-0 rounded-lg bg-brand px-3 py-2.5 text-sm font-700 text-white hover:bg-brand-600">Adaugă</button></div>}
             <ul className="space-y-1">
               <AnimatePresence initial={false}>
-                {t.due.length === 0 && !adding && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl bg-paper p-3 text-center text-[13px] text-muted">Nimic urgent — zi liniștită 🎉</motion.li>}
+                {t.due.length === 0 && !adding && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl bg-paper p-3 text-center text-[13px] text-muted">Nimic urgent — zi liniștită.</motion.li>}
                 {t.due.map((task) => (
                   <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                     {task.kind === 'task'
@@ -947,7 +947,7 @@ function WhatINeed({ s, subject, avg, reload }) {
       </div>
       {res && <motion.div key={`${target}-${n}-${res.reachable}-${res.trivial}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cx('mt-4 rounded-xl p-3.5 text-sm', !res.reachable ? 'bg-heat-heavybg text-heat-heavy' : res.trivial ? 'bg-heat-calmbg text-heat-calm' : 'bg-brand-50 text-brand-700')}>
         {!res.reachable ? <span>Media <b>{target}</b> nu mai e posibilă cu {n} {n === 1 ? 'notă' : 'note'} — ar trebui peste 10.</span>
-          : res.trivial ? <span>Ești deja acolo 🎉 Chiar și o notă mică îți păstrează media <b>{target}</b>.</span>
+          : res.trivial ? <span>Ești deja acolo. Chiar și o notă mică îți păstrează media <b>{target}</b>.</span>
           : <span>Ai nevoie de minim <b className="font-display text-base">{res.need}</b> la {n === 1 ? 'următoarea notă' : `fiecare din următoarele ${n} note`} ca să ajungi la media <b>{target}</b>.</span>}
       </motion.div>}
     </div>
