@@ -15,62 +15,62 @@
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.4/babel.min.js"></script>
 <script>
   tailwind.config = {
-    theme: {
-      extend: {
-        fontFamily: {
-          display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        },
-        fontWeight: { 400: '400', 500: '500', 600: '600', 700: '700', 800: '800' },
-        colors: {
-          ink: '#161932', paper: '#EDF0F7', line: '#E3E7F1',
-          brand: { DEFAULT: '#4B3BE8', 600: '#3A2BCF', 50: '#EEECFF', 100: '#E1DEFF', 200: '#C8C2FF' },
-          muted: '#636B86',
-          heat: { calm: '#15A34A', calmbg: '#DEF7E6', light: '#C98A04', lightbg: '#FBF1CF',
-                  busy: '#E8650E', busybg: '#FCE6D5', heavy: '#D92626', heavybg: '#FBDFDF' },
-        },
-        boxShadow: {
-          card: '0 1px 2px rgba(22,25,50,.04), 0 6px 20px -8px rgba(22,25,50,.12)',
-          lift: '0 10px 40px -12px rgba(22,25,50,.28)', pill: '0 1px 2px rgba(22,25,50,.10)',
-        },
-        borderRadius: { xl2: '1.25rem' },
+    theme: { extend: {
+      fontFamily: {
+        display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
-    },
+      fontWeight: { 400: '400', 500: '500', 600: '600', 700: '700', 800: '800' },
+      colors: {
+        ink: '#12201E', paper: '#EAF1EF', line: '#DCE7E4',
+        brand: { DEFAULT: '#0D9488', 600: '#0B7A72', 700: '#09625C', 50: '#E7FBF7', 100: '#C7F2EA', 200: '#9AE6D9' },
+        muted: '#5E6E6B',
+        heat: { calm: '#15A34A', calmbg: '#DEF7E6', light: '#C98A04', lightbg: '#FBF1CF',
+                busy: '#E8650E', busybg: '#FCE6D5', heavy: '#D92626', heavybg: '#FBDFDF' },
+      },
+      boxShadow: {
+        card: '0 1px 2px rgba(18,32,30,.04), 0 6px 20px -8px rgba(18,32,30,.12)',
+        lift: '0 10px 40px -12px rgba(18,32,30,.28)', pill: '0 1px 2px rgba(18,32,30,.10)',
+      },
+      borderRadius: { xl2: '1.25rem' },
+    } },
   };
 </script>
 <style>
   html { -webkit-text-size-adjust: 100%; }
-  body { font-family: Inter, sans-serif; background: #EDF0F7; color: #161932; -webkit-font-smoothing: antialiased; }
+  body { font-family: Inter, sans-serif; background: #EAF1EF; color: #12201E; -webkit-font-smoothing: antialiased; }
   .font-display { font-family: "Bricolage Grotesque", sans-serif; }
   .tnum { font-variant-numeric: tabular-nums; }
   .graph-paper {
-    background-color: #EDF0F7;
-    background-image: linear-gradient(to right, rgba(75,59,232,.045) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(75,59,232,.045) 1px, transparent 1px);
+    background-color: #EAF1EF;
+    background-image: linear-gradient(to right, rgba(13,148,136,.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(13,148,136,.05) 1px, transparent 1px);
     background-size: 26px 26px;
   }
-  .highlight { background: linear-gradient(104deg, rgba(253,224,71,0) .3%, rgba(253,224,71,.7) 2.4%, rgba(253,224,71,.55) 95%, rgba(253,224,71,0) 99%);
+  .highlight { background: linear-gradient(104deg, rgba(253,224,71,0) .3%, rgba(253,224,71,.72) 2.4%, rgba(253,224,71,.56) 95%, rgba(253,224,71,0) 99%);
     border-radius: .3em; padding: 0 .12em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: #C9D0E0; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb { background: #BFD2CD; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  *:focus-visible { outline: 2px solid #4B3BE8; outline-offset: 2px; border-radius: 6px; }
+  *:focus-visible { outline: 2px solid #0D9488; outline-offset: 2px; border-radius: 6px; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext } = React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const Mo = window.Motion || {};
 const motion = Mo.motion, AnimatePresence = Mo.AnimatePresence, MotionConfig = Mo.MotionConfig;
 const useReducedMotion = Mo.useReducedMotion || (() => false);
 const spring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 };
 const cx = (...a) => a.filter(Boolean).join(' ');
+const DAYS = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri'];
+const DAYS_SHORT = ['Lun', 'Mar', 'Mie', 'Joi', 'Vin'];
 
 const HEAT = {
-  none:  { bg: '#F3F5FB', fg: '#9AA3BC', ring: 'transparent' },
+  none:  { bg: '#F0F4F3', fg: '#8A9794', ring: 'transparent' },
   calm:  { bg: '#DEF7E6', fg: '#0F7C39', ring: '#9BE3B5' },
   light: { bg: '#FBF1CF', fg: '#946500', ring: '#E8D27A' },
   busy:  { bg: '#FCE6D5', fg: '#B14A08', ring: '#F3B483' },
@@ -78,81 +78,52 @@ const HEAT = {
 };
 
 /* ---------------- API ---------------- */
-const jfetch = (url, opts) => fetch(url, opts).then((r) => r.json());
+const jfetch = (url, opts) => fetch(url, opts).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'eroare'); return d; });
 const API = {
-  state: (role) => jfetch(`/api/state?role=${role}`),
+  get: (p) => jfetch(p),
   post: (p, b) => jfetch(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }),
   patch: (p, b) => jfetch(p, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }),
   del: (p) => jfetch(p, { method: 'DELETE' }),
 };
-
-const Ctx = createContext(null);
-const useApp = () => useContext(Ctx);
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /* ---------------- Icons ---------------- */
 const Ic = ({ size = 20, fill = false, sw = 1.75, children, ...p }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'}
-       stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
 );
 const Icons = {
   sun: (p) => <Ic {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></Ic>,
   grid: (p) => <Ic {...p}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></Ic>,
   pulse: (p) => <Ic {...p}><path d="M3 12h4l2 6 4-14 2 8h6" /></Ic>,
   chart: (p) => <Ic {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></Ic>,
-  inbox: (p) => <Ic {...p}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" /></Ic>,
-  bell: (p) => <Ic {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></Ic>,
-  chat: (p) => <Ic {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></Ic>,
   check: (p) => <Ic {...p}><path d="M20 6 9 17l-5-5" /></Ic>,
   plus: (p) => <Ic {...p}><path d="M12 5v14M5 12h14" /></Ic>,
   chevR: (p) => <Ic {...p}><path d="m9 18 6-6-6-6" /></Ic>,
+  chevL: (p) => <Ic {...p}><path d="m15 18-6-6 6-6" /></Ic>,
   chevD: (p) => <Ic {...p}><path d="m6 9 6 6 6-6" /></Ic>,
   alert: (p) => <Ic {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></Ic>,
   bag: (p) => <Ic {...p}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></Ic>,
   clock: (p) => <Ic {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Ic>,
-  lock: (p) => <Ic {...p}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Ic>,
   shield: (p) => <Ic {...p}><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z" /></Ic>,
   user: (p) => <Ic {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Ic>,
-  spark: (p) => <Ic {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></Ic>,
-  magic: (p) => <Ic {...p}><path d="m5 19 9-9M13 4l1 3 3 1-3 1-1 3-1-3-3-1 3-1zM19 13l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></Ic>,
-  x: (p) => <Ic {...p}><path d="M18 6 6 18M6 6l12 12" /></Ic>,
-  moon: (p) => <Ic {...p}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></Ic>,
+  users: (p) => <Ic {...p}><circle cx="9" cy="8" r="3.4" /><path d="M2.5 21a6.5 6.5 0 0 1 13 0" /><path d="M16 5.5a3.4 3.4 0 0 1 0 6.6M17 21a6.5 6.5 0 0 0-3-5.5" /></Ic>,
+  teacher: (p) => <Ic {...p}><path d="M3 7l9-4 9 4-9 4z" /><path d="M7 9v5c0 1.4 2.2 2.6 5 2.6s5-1.2 5-2.6V9" /><path d="M21 7v5" /></Ic>,
   book: (p) => <Ic {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></Ic>,
-  pin: (p) => <Ic {...p}><path d="M9 4h6l-1 7 4 3H6l4-3z" /><path d="M12 14v6" /></Ic>,
+  building: (p) => <Ic {...p}><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3" /></Ic>,
   target: (p) => <Ic {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></Ic>,
-  dot: (p) => <Ic {...p} fill><circle cx="12" cy="12" r="4" /></Ic>,
-  send: (p) => <Ic {...p}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></Ic>,
-  camera: (p) => <Ic {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></Ic>,
+  x: (p) => <Ic {...p}><path d="M18 6 6 18M6 6l12 12" /></Ic>,
   minus: (p) => <Ic {...p}><path d="M5 12h14" /></Ic>,
   calendar: (p) => <Ic {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Ic>,
   trash: (p) => <Ic {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Ic>,
+  logout: (p) => <Ic {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Ic>,
+  spark: (p) => <Ic {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></Ic>,
 };
 
 /* ---------------- primitives ---------------- */
-function SubjectDot({ code, size = 10 }) {
-  const { data } = useApp();
-  const hue = (data.subjects[code] || {}).hue || '#636B86';
-  return <span className="inline-block rounded-full shrink-0" style={{ width: size, height: size, background: hue }} />;
-}
+function Dot({ hue = '#5E6E6B', size = 10 }) { return <span className="inline-block rounded-full shrink-0" style={{ width: size, height: size, background: hue }} />; }
 function Pill({ children, tone = 'muted', className }) {
-  const tones = { muted: 'bg-paper text-muted', brand: 'bg-brand-50 text-brand-600', heavy: 'text-heat-heavy' };
-  return <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-700', tones[tone], className)}>{children}</span>;
-}
-function FluidTabs({ tabs, active, onChange, id, size = 'md' }) {
-  const pad = size === 'sm' ? 'px-3 py-1.5 text-[13px]' : 'px-4 py-2 text-sm';
-  return (
-    <div className="relative inline-flex items-center gap-1 rounded-full border border-line bg-white/70 p-1 shadow-pill backdrop-blur">
-      {tabs.map((t) => {
-        const on = active === t.id;
-        return (
-          <button key={t.id} onClick={() => onChange(t.id)}
-            className={cx('relative rounded-full font-700 transition-colors', pad, on ? 'text-ink' : 'text-muted hover:text-ink')}>
-            {on && <motion.span layoutId={`fluid-${id}`} transition={spring} className="absolute inset-0 rounded-full bg-brand-50 ring-1 ring-brand-100" />}
-            <span className="relative z-10 inline-flex items-center gap-1.5">{t.icon}{t.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  const t = { muted: 'bg-paper text-muted', brand: 'bg-brand-50 text-brand-600', heavy: 'text-heat-heavy' };
+  return <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-700', t[tone], className)}>{children}</span>;
 }
 function ShimmerButton({ children, className, icon, ...p }) {
   return (
@@ -162,24 +133,38 @@ function ShimmerButton({ children, className, icon, ...p }) {
     </button>
   );
 }
+function FluidTabs({ tabs, active, onChange, id }) {
+  return (
+    <div className="relative inline-flex items-center gap-1 rounded-full border border-line bg-white/70 p-1 shadow-pill backdrop-blur">
+      {tabs.map((t) => { const on = active === t.id; return (
+        <button key={t.id} onClick={() => onChange(t.id)} className={cx('relative rounded-full px-4 py-2 text-sm font-700 transition-colors', on ? 'text-ink' : 'text-muted hover:text-ink')}>
+          {on && <motion.span layoutId={`fluid-${id}`} transition={spring} className="absolute inset-0 rounded-full bg-brand-50 ring-1 ring-brand-100" />}
+          <span className="relative z-10 inline-flex items-center gap-1.5">{t.icon}{t.label}</span>
+        </button>
+      ); })}
+    </div>
+  );
+}
 function Sheet({ open, onClose, children, labelledBy }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey); document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open]);
   return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
-          {children}
-        </div>
-      )}
-    </AnimatePresence>
+    <AnimatePresence>{open && (
+      <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
+        {children}
+      </div>
+    )}</AnimatePresence>
   );
+}
+function Modal({ children, wide }) {
+  return <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring}
+    className={cx('relative z-10 w-full rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2', wide ? 'max-w-lg' : 'max-w-md')}>
+    <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />{children}</motion.div>;
 }
 function Stepper({ value, set, min = 1, max = 10 }) {
   return (
@@ -208,611 +193,37 @@ function ViewHead({ title, sub, icon, right, bare }) {
   return (
     <div className={cx('flex items-end justify-between gap-3', !bare && 'mb-4')}>
       <div className="flex items-center gap-3">
-        <span className="hidden h-11 w-11 place-items-center rounded-xl bg-white text-brand shadow-card sm:grid">{icon}</span>
-        <div>
-          <h1 className="font-display text-2xl font-700 leading-none sm:text-[28px]">{title}</h1>
-          <p className="mt-1 text-[13.5px] text-muted">{sub}</p>
-        </div>
+        {icon && <span className="hidden h-11 w-11 place-items-center rounded-xl bg-white text-brand shadow-card sm:grid">{icon}</span>}
+        <div><h1 className="font-display text-2xl font-700 leading-none sm:text-[28px]">{title}</h1>{sub && <p className="mt-1 text-[13.5px] text-muted">{sub}</p>}</div>
       </div>
       {right}
     </div>
   );
 }
+function Empty({ icon, title, body }) {
+  return (
+    <div className="grid place-items-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center">
+      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-paper text-muted">{icon}</span>
+      <p className="mt-3 font-display text-lg font-700">{title}</p>
+      <p className="mt-1 max-w-sm text-[13.5px] text-muted">{body}</p>
+    </div>
+  );
+}
+function Field({ label, children }) {
+  return <label className="block"><span className="mb-1 block text-[12px] font-700 text-muted">{label}</span>{children}</label>;
+}
+function Input(p) { return <input {...p} className={cx('w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand', p.className)} />; }
+function initials(name) { return (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase(); }
 function useCountUp(value, dur = 700) {
-  const [v, setV] = useState(value);
-  const reduce = useReducedMotion();
-  const prev = useRef(value);
+  const [v, setV] = useState(value); const reduce = useReducedMotion(); const prev = useRef(value);
   useEffect(() => {
     if (reduce) { setV(value); prev.current = value; return; }
-    const from = prev.current, to = value, t0 = performance.now();
-    let raf;
-    const tick = (t) => {
-      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
-      setV(from + (to - from) * e);
-      if (p < 1) raf = requestAnimationFrame(tick); else prev.current = to;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const from = prev.current, to = value, t0 = performance.now(); let raf;
+    const tick = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); setV(from + (to - from) * e); if (p < 1) raf = requestAnimationFrame(tick); else prev.current = to; };
+    raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
   }, [value]);
   return v;
 }
-
-/* ================= TODAY ================= */
-function TodayView({ onGoto }) {
-  const { data, mutate } = useApp();
-  const reduce = useReducedMotion();
-  const S = data.subjects;
-  const t = data.today;
-  const dueSoon = data.tasks.filter((x) => x.bucket === 'today' || x.bucket === 'tomorrow');
-  const newAnns = data.announcements.slice(0, 2);
-  const collision = data.workload.collisions[0];
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState('');
-  const stagger = (i) => reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.05 + i * 0.07, ...spring } };
-
-  const toggle = (task) => mutate(API.patch(`/api/tasks/${task.id}`, { done: !task.done }));
-  const addTask = () => {
-    const title = draft.trim(); if (!title) { setAdding(false); return; }
-    setDraft(''); setAdding(false);
-    mutate(API.post('/api/tasks', { title, type: 'tema', due: new Date().toISOString().slice(0, 10) }));
-  };
-
-  return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-      <motion.header {...stagger(0)} className="relative overflow-hidden rounded-xl2 bg-ink p-6 text-white shadow-lift sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand/40 blur-3xl" />
-        <div className="pointer-events-none absolute right-24 top-10 h-24 w-24 rounded-full bg-[#FDE047]/20 blur-2xl" />
-        <div className="relative">
-          <p className="flex items-center gap-2 text-sm font-500 text-white/60"><Icons.sun size={16} /> {t.dateLabel} · Clasa {data.student.class}</p>
-          <h1 className="mt-2 font-display text-[28px] font-700 leading-tight sm:text-[38px]">
-            Bună, {data.student.name.split(' ')[0]}. Azi ai <span className="highlight text-ink">{t.classes.length} ore</span> și <span className="highlight text-ink">{dueSoon.length} de predat</span> curând.
-          </h1>
-          <p className="mt-2 max-w-xl text-[15px] text-white/70">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <ShimmerButton icon={<Icons.grid size={18} />} onClick={() => onGoto('timetable')}>Vezi orarul de azi</ShimmerButton>
-            <button onClick={() => onGoto('workload')} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 font-700 text-white hover:bg-white/10"><Icons.pulse size={18} /> Cum arată săptămâna</button>
-          </div>
-        </div>
-      </motion.header>
-
-      {collision && (
-        <motion.button {...stagger(1)} onClick={() => onGoto('workload')}
-          className="group mt-4 flex w-full items-center gap-3 rounded-2xl border border-heat-heavy/25 bg-heat-heavybg/70 p-4 text-left hover:bg-heat-heavybg">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-heat-heavy shadow-sm"><Icons.alert size={20} /></span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-700 text-heat-heavy">Săptămâna asta se aglomerează</span>
-            <span className="block truncate text-[13px] text-ink/70">{collision.dateLabel}: {collision.items.length} evaluări în aceeași zi. Începe revizia din weekend.</span>
-          </span>
-          <Icons.chevR className="shrink-0 text-heat-heavy/70 transition-transform group-hover:translate-x-0.5" />
-        </motion.button>
-      )}
-
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <motion.section {...stagger(2)} className="lg:col-span-2 rounded-xl2 border border-line bg-white p-5 shadow-card">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-lg font-700">Programul de azi</h2>
-            {t.isWeekend && <Pill tone="muted">weekend · previzualizare luni</Pill>}
-          </div>
-          <ol className="relative">
-            <span className="absolute left-[62px] top-2 bottom-2 w-px bg-line" />
-            {t.classes.map((c, i) => (
-              <li key={i} className="relative flex items-stretch gap-4 py-1.5">
-                <div className="w-12 shrink-0 pt-1 text-right text-[13px] font-600 tnum text-muted">{c.time}</div>
-                <div className="relative z-10 mt-1.5 grid place-items-center"><span className={cx('h-3 w-3 rounded-full ring-4 ring-white', c.current ? 'bg-brand' : 'bg-line')} /></div>
-                <div className={cx('flex min-w-0 flex-1 items-center justify-between rounded-xl px-3.5 py-2.5', c.current ? 'bg-brand-50 ring-1 ring-brand-100' : 'hover:bg-paper')}>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2"><SubjectDot code={c.subject} /><span className="truncate font-700">{c.name}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
-                    <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>
-                  </div>
-                  <span className="ml-3 shrink-0 rounded-lg bg-white px-2 py-1 text-[12px] font-700 text-ink shadow-pill ring-1 ring-line">{c.room}</span>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </motion.section>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-lg font-700">De predat curând</h2>
-              <button onClick={() => setAdding(true)} className="inline-flex items-center gap-1 text-[13px] font-700 text-brand hover:text-brand-600"><Icons.plus size={14} /> adaugă</button>
-            </div>
-            {adding && (
-              <div className="mb-2 flex items-center gap-2">
-                <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); if (e.key === 'Escape') { setAdding(false); setDraft(''); } }}
-                  placeholder="Ce ai de făcut?" className="flex-1 rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-brand" />
-                <button onClick={addTask} className="rounded-lg bg-brand px-3 py-2 text-sm font-700 text-white hover:bg-brand-600">Adaugă</button>
-              </div>
-            )}
-            <ul className="space-y-1">
-              <AnimatePresence initial={false}>
-                {dueSoon.length === 0 && !adding && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl bg-paper p-3 text-center text-[13px] text-muted">Nimic urgent — zi liniștită 🎉</motion.li>}
-                {dueSoon.map((task) => (
-                  <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-                    <button onClick={() => toggle(task)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-paper">
-                      <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition-colors', task.done ? 'border-brand bg-brand text-white' : 'border-line')}>{task.done && <Icons.check size={14} sw={3} />}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className={cx('block truncate text-sm font-600', task.done && 'text-muted line-through')}>{task.title}</span>
-                        <span className="block text-[12px] text-muted">{task.subject ? S[task.subject].short + ' · ' : ''}{task.typeLabel}</span>
-                      </span>
-                      <Pill tone={task.bucket === 'today' ? 'heavy' : 'muted'} className={task.bucket === 'today' ? 'bg-heat-heavybg' : ''}>{task.dueLabel}</Pill>
-                    </button>
-                  </motion.li>
-                ))}
-              </AnimatePresence>
-            </ul>
-          </motion.section>
-
-          <motion.section {...stagger(4)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-700"><Icons.bag size={18} className="text-brand" /> De pus în ghiozdan</h2>
-            <ul className="flex flex-wrap gap-2">
-              {t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + i * 0.05 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}
-            </ul>
-          </motion.section>
-        </div>
-      </div>
-
-      <motion.section {...stagger(5)} className="mt-4 rounded-xl2 border border-line bg-white p-5 shadow-card">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-display text-lg font-700"><Icons.bell size={18} className="text-brand" /> Noutăți de la profesori</h2>
-          <button onClick={() => onGoto('inbox')} className="inline-flex items-center gap-1 text-sm font-700 text-brand hover:text-brand-600">Toate <Icons.chevR size={15} /></button>
-        </div>
-        <ul className="divide-y divide-line">
-          {newAnns.map((a) => (
-            <li key={a.id} className="flex items-start gap-3 py-3">
-              <SubjectDot code={a.subject} size={12} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2"><span className="text-sm font-700">{a.name}</span>{a.priority === 'urgent' && <Pill tone="heavy" className="bg-heat-heavybg">urgent</Pill>}<span className="text-[12px] text-muted">{a.when}</span></div>
-                <p className="mt-0.5 line-clamp-2 text-[13.5px] text-ink/75">{a.text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </motion.section>
-    </div>
-  );
-}
-
-/* ================= TIMETABLE ================= */
-function TimetableView() {
-  const { data } = useApp();
-  const reduce = useReducedMotion();
-  const tt = data.timetable, S = data.subjects;
-  const days = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri'];
-  const [sel, setSel] = useState(null);
-  return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-      <ViewHead title="Orar" sub={`Săptămâna ${tt.weekLabel} · azi e evidențiat`} icon={<Icons.grid />} />
-      <div className="overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card">
-        <div className="grid min-w-[760px] gap-2" style={{ gridTemplateColumns: '58px repeat(5, 1fr)' }}>
-          <div />
-          {days.map((d, i) => <div key={d} className={cx('rounded-lg px-2 py-2 text-center text-sm font-700', i === tt.todayIdx ? 'bg-brand text-white' : 'text-ink')}>{d}{i === tt.todayIdx && <span className="ml-1 text-[11px] font-500 text-white/70">azi</span>}</div>)}
-          {tt.periods.map((time, pi) => (
-            <React.Fragment key={time}>
-              <div className="flex items-start justify-end pr-1 pt-2 text-[12px] font-600 tnum text-muted">{time}</div>
-              {tt.days.map((day, di) => {
-                const cell = day[pi];
-                if (!cell) return <div key={di} className="rounded-lg border border-dashed border-line/70" />;
-                return (
-                  <motion.button key={di} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (pi * 5 + di) * 0.012 }}
-                    onClick={() => setSel({ ...cell, time })}
-                    className={cx('group relative rounded-lg border p-2 text-left hover:shadow-pill', di === tt.todayIdx ? 'border-brand-100 bg-brand-50/50' : 'border-line bg-white hover:border-brand-100')}
-                    style={{ borderLeft: `3px solid ${cell.hue}` }}>
-                    <div className="truncate text-[13px] font-700 leading-tight">{cell.short}</div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted">{cell.room}</div>
-                    {cell.assessment && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }} />}
-                  </motion.button>
-                );
-              })}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-      <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-heavy" /> evaluare</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-light" /> temă de predat</span>
-        <span>Atinge o oră pentru detalii.</span>
-      </p>
-      <Sheet open={!!sel} onClose={() => setSel(null)} labelledBy="tt-title">
-        {sel && (
-          <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring}
-            className="relative z-10 w-full max-w-md rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2">
-            <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />
-            <div className="flex items-center gap-3">
-              <span className="h-10 w-1.5 rounded-full" style={{ background: sel.hue }} />
-              <div><h3 id="tt-title" className="font-display text-xl font-700">{S[sel.subject].name}</h3><p className="text-sm text-muted">{S[sel.subject].teacher}</p></div>
-            </div>
-            <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl bg-paper p-3"><dt className="text-[12px] text-muted">Ora</dt><dd className="font-700 tnum">{sel.time}</dd></div>
-              <div className="rounded-xl bg-paper p-3"><dt className="text-[12px] text-muted">Sala</dt><dd className="font-700">{sel.room}</dd></div>
-            </dl>
-            {sel.assessment && <p className="mt-3 rounded-xl bg-heat-heavybg/60 p-3 text-sm font-600 text-heat-heavy">Ai {data.typeLabel[sel.assessment].toLowerCase()} la această oră.</p>}
-            <button onClick={() => setSel(null)} className="mt-5 w-full rounded-xl bg-ink py-2.5 font-700 text-white hover:bg-ink/90">Închide</button>
-          </motion.div>
-        )}
-      </Sheet>
-    </div>
-  );
-}
-
-/* ================= WORKLOAD ================= */
-function WorkloadView() {
-  const { data, role, mutate } = useApp();
-  const reduce = useReducedMotion();
-  const S = data.subjects;
-  const wl = data.workload;
-  const [addOpen, setAddOpen] = useState(false);
-  const [subject, setSubject] = useState('mate');
-  const schedule = (dateISO) => { mutate(API.post('/api/assessments', { subject, type: 'test', date: dateISO, title: 'Lucrare' })); setAddOpen(false); };
-
-  return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-      <ViewHead title="Încărcare" icon={<Icons.pulse />}
-        sub={role === 'teacher' ? 'Vezi cât de plină e săptămâna clasei înainte să programezi o evaluare' : 'Harta efortului pe zile — ca să nu te aglomerezi'}
-        right={role === 'teacher' && <ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="hidden sm:inline-flex">Programează o lucrare</ShimmerButton>} />
-
-      {wl.collisions.length > 0 && (
-        <motion.div initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 flex items-start gap-3 rounded-xl2 border border-heat-heavy/25 bg-heat-heavybg/60 p-4">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-heat-heavy shadow-sm"><Icons.alert size={18} /></span>
-          <div className="text-sm">
-            <p className="font-700 text-heat-heavy">Coliziune de evaluări detectată</p>
-            {wl.collisions.map((c, i) => <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((t) => `${S[t.subject].short} (${data.typeLabel[t.type].toLowerCase()})`).join(' + ')}. {role === 'student' ? 'Planifică revizia din timp.' : 'Ia în calcul o altă zi.'}</p>)}
-          </div>
-        </motion.div>
-      )}
-
-      <div className="space-y-4">
-        {wl.weeks.map((wk, wi) => (
-          <section key={wi} className="rounded-xl2 border border-line bg-white p-4 shadow-card sm:p-5">
-            <h2 className="mb-3 text-sm font-700 text-muted">{wk.label}</h2>
-            <div className="grid grid-cols-5 gap-2 sm:gap-3">
-              {wk.days.map((d, i) => {
-                const h = HEAT[d.heat.k];
-                return (
-                  <motion.div key={i} initial={reduce ? false : { opacity: 0, scale: .92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: (wi * 5 + i) * 0.03, ...spring }}
-                    className="relative flex flex-col rounded-xl p-2.5 sm:p-3" style={{ background: h.bg, boxShadow: d.clash ? `inset 0 0 0 2px ${h.ring}` : 'none' }}>
-                    <div className="flex items-center justify-between"><span className="text-[12px] font-700" style={{ color: h.fg }}>{d.dateLabel}</span>{d.clash && <Icons.alert size={13} style={{ color: h.fg }} />}</div>
-                    <div className="mt-2 flex-1 space-y-1">
-                      {d.items.length === 0 && <span className="text-[11px]" style={{ color: h.fg, opacity: .7 }}>liber</span>}
-                      {d.items.map((t, j) => <div key={j} className="flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-1 text-[10.5px] font-600 leading-tight" style={{ color: h.fg }}><SubjectDot code={t.subject} size={6} /><span className="truncate">{t.short}</span></div>)}
-                    </div>
-                    <span className="mt-2 text-[10px] font-700 uppercase tracking-wide" style={{ color: h.fg, opacity: .8 }}>{d.heat.label}</span>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {[['calm', 'ușor'], ['light', 'moderat'], ['busy', 'încărcat'], ['heavy', 'supraîncărcat']].map(([k, l]) => <span key={k} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-700" style={{ background: HEAT[k].bg, color: HEAT[k].fg }}>{l}</span>)}
-      </div>
-
-      {role === 'teacher' && <ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="mt-4 w-full sm:hidden">Programează o lucrare</ShimmerButton>}
-
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="add-title">
-        {addOpen && (
-          <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring}
-            className="relative z-10 w-full max-w-md rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2">
-            <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />
-            <h3 id="add-title" className="font-display text-xl font-700">Programează o lucrare la {data.student.class}</h3>
-            <p className="mt-1 text-sm text-muted">SchoolPilot verifică mai întâi cât de încărcată e clasa.</p>
-            <p className="mt-4 mb-1.5 text-[12px] font-700 text-muted">Materie</p>
-            <div className="flex flex-wrap gap-1.5">
-              {['mate', 'fiz', 'chim', 'bio', 'ist', 'geo'].map((c) => (
-                <button key={c} onClick={() => setSubject(c)} className={cx('rounded-lg px-2.5 py-1.5 text-[13px] font-700 ring-1 transition-colors', subject === c ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{S[c].short}</button>
-              ))}
-            </div>
-            <p className="mt-4 mb-2 text-[13px] font-700 text-heat-calm">Zile recomandate (clasa e cel mai liberă)</p>
-            <div className="space-y-2">
-              {wl.suggestions.map((d) => { const h = HEAT[d.heat.k]; return (
-                <div key={d.date} className="flex items-center justify-between rounded-xl p-3" style={{ background: h.bg }}>
-                  <span className="font-700" style={{ color: h.fg }}>{d.dateLabel} · {d.heat.label}</span>
-                  <button onClick={() => schedule(d.date)} className="rounded-lg bg-white px-3 py-1.5 text-[13px] font-700 text-ink shadow-pill ring-1 ring-line hover:bg-paper">Alege</button>
-                </div>
-              ); })}
-            </div>
-            <button onClick={() => setAddOpen(false)} className="mt-5 w-full rounded-xl border border-line py-2.5 font-700 text-muted hover:bg-paper">Anulează</button>
-          </motion.div>
-        )}
-      </Sheet>
-    </div>
-  );
-}
-
-/* ================= MARKS ================= */
-function MarksView() {
-  const [tab, setTab] = useState('grades');
-  return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <ViewHead title="Catalog" sub="Note, medii și absențe — regulile din România" icon={<Icons.chart />} bare />
-        <FluidTabs id="marks" active={tab} onChange={setTab} tabs={[{ id: 'grades', label: 'Note', icon: <Icons.chart size={15} /> }, { id: 'abs', label: 'Absențe', icon: <Icons.calendar size={15} /> }]} />
-      </div>
-      <AnimatePresence mode="wait">
-        {tab === 'grades'
-          ? <motion.div key="g" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><GradesPanel /></motion.div>
-          : <motion.div key="a" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><AbsencesPanel /></motion.div>}
-      </AnimatePresence>
-    </div>
-  );
-}
-function GradesPanel() {
-  const { data } = useApp();
-  const g = data.grades;
-  const [open, setOpen] = useState(null);
-  const animOverall = useCountUp(g.overall);
-  return (
-    <div>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Media generală" value={animOverall.toFixed(2)} tone="#4B3BE8" icon={<Icons.target size={16} />} />
-        <StatTile label="Materii" value={g.subjects.length} tone="#0E8FB0" icon={<Icons.book size={16} />} />
-        {g.best && <StatTile label="Cea mai bună" value={g.best.short} tone="#16A34A" icon={<Icons.spark size={16} />} sub={`media ${g.best.avg.toFixed(2)}`} />}
-        {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
-      </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {g.subjects.map((s) => (
-          <motion.div key={s.code} layout className={cx('rounded-xl2 border bg-white p-4 shadow-card', s.risk ? 'border-heat-heavy/30' : 'border-line')}>
-            <button onClick={() => setOpen(open === s.code ? null : s.code)} className="w-full text-left">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5"><SubjectDot code={s.code} size={12} /><span className="font-700">{s.name}</span>{s.risk && <Pill tone="heavy" className="bg-heat-heavybg">risc de corigență</Pill>}</div>
-                <div className="flex items-center gap-3"><span className="font-display text-2xl font-700 tnum" style={{ color: s.risk ? '#D92626' : '#161932' }}>{s.avg.toFixed(2)}</span><motion.span animate={{ rotate: open === s.code ? 180 : 0 }}><Icons.chevD size={18} className="text-muted" /></motion.span></div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {s.values.map((gr, i) => <span key={i} className="grid h-8 w-8 place-items-center rounded-lg text-sm font-700 tnum" style={{ background: gr.v >= 9 ? '#DEF7E6' : gr.v >= 7 ? '#EEECFF' : gr.v >= 5 ? '#FBF1CF' : '#FBDFDF', color: gr.v >= 9 ? '#0F7C39' : gr.v >= 7 ? '#3A2BCF' : gr.v >= 5 ? '#946500' : '#AE1919' }}>{gr.v}</span>)}
-              </div>
-            </button>
-            <AnimatePresence>
-              {open === s.code && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden">
-                  <div className="mt-4 border-t border-line pt-4"><WhatINeed subject={s.code} avg={s.avg} /></div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-function WhatINeed({ subject, avg }) {
-  const { mutate } = useApp();
-  const [target, setTarget] = useState(Math.min(10, Math.ceil(avg) + 1));
-  const [n, setN] = useState(1);
-  const [res, setRes] = useState(null);
-  const [newGrade, setNewGrade] = useState(Math.round(avg));
-  useEffect(() => {
-    const id = setTimeout(() => { API.post('/api/grades/what-if', { subject, target, n }).then(setRes); }, 160);
-    return () => clearTimeout(id);
-  }, [subject, target, n]);
-  return (
-    <div>
-      <p className="flex items-center gap-2 text-sm font-700"><Icons.target size={16} className="text-brand" /> De ce notă ai nevoie?</p>
-      <div className="mt-3 flex flex-wrap items-center gap-4">
-        <div><label className="text-[12px] text-muted">Media dorită</label><div className="mt-1"><Stepper value={target} set={setTarget} /></div></div>
-        <div><label className="text-[12px] text-muted">Note rămase</label><div className="mt-1"><Stepper value={n} set={setN} max={5} /></div></div>
-      </div>
-      {res && (
-        <motion.div key={`${target}-${n}-${res.reachable}-${res.trivial}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-          className={cx('mt-4 rounded-xl p-3.5 text-sm', !res.reachable ? 'bg-heat-heavybg text-heat-heavy' : res.trivial ? 'bg-heat-calmbg text-heat-calm' : 'bg-brand-50 text-brand-600')}>
-          {!res.reachable ? <span>Media <b>{target}</b> nu mai e posibilă cu {n} {n === 1 ? 'notă' : 'note'} — ar trebui peste 10. Mărește numărul de note sau coboară ținta.</span>
-            : res.trivial ? <span>Ești deja acolo 🎉 Chiar și o notă mică îți păstrează media <b>{target}</b>.</span>
-            : <span>Ai nevoie de minim <b className="font-display text-base">{res.need}</b> la {n === 1 ? 'următoarea notă' : `fiecare din următoarele ${n} note`} ca să ajungi la media <b>{target}</b>.</span>}
-        </motion.div>
-      )}
-      <div className="mt-4 flex items-center gap-2 border-t border-line pt-4">
-        <span className="text-[12px] text-muted">Adaugă o notă primită:</span>
-        <Stepper value={newGrade} set={setNewGrade} />
-        <button onClick={() => mutate(API.post('/api/grades', { subject, value: newGrade }))} className="rounded-lg bg-ink px-3 py-2 text-[13px] font-700 text-white hover:bg-ink/90">Salvează</button>
-      </div>
-    </div>
-  );
-}
-function AbsencesPanel() {
-  const { data, mutate } = useApp();
-  const a = data.absences, S = data.subjects;
-  return (
-    <div>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Nemotivate" value={a.totUn} tone="#D92626" icon={<Icons.alert size={16} />} sub={`prag ${a.threshold} → scade purtarea`} />
-        <StatTile label="Motivate" value={a.totEx} tone="#16A34A" icon={<Icons.check size={16} />} />
-        <StatTile label="Total" value={a.totUn + a.totEx} tone="#636B86" icon={<Icons.calendar size={16} />} />
-      </div>
-      {a.totUn >= 2 && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm">
-          <Icons.alert size={18} className="shrink-0 text-heat-light" />
-          <span className="text-ink/80">Mai ai <b>{a.threshold - a.totUn} absențe nemotivate</b> până la pragul care îți scade nota la purtare. Trimite scutirile la timp.</span>
-        </div>
-      )}
-      <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
-        {a.subjects.map((s, i) => (
-          <div key={s.code} className={cx('flex items-center gap-3 p-4', i && 'border-t border-line')}>
-            <SubjectDot code={s.code} size={12} /><span className="flex-1 font-700">{s.name}</span>
-            {s.unexcused > 0 && <span className="rounded-lg bg-heat-heavybg px-2.5 py-1 text-[13px] font-700 text-heat-heavy tnum">{s.unexcused} nemotivate</span>}
-            {s.excused > 0 && <span className="rounded-lg bg-heat-calmbg px-2.5 py-1 text-[13px] font-700 text-heat-calm tnum">{s.excused} motivate</span>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ================= INBOX ================= */
-function InboxView() {
-  const [tab, setTab] = useState('ann');
-  return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <ViewHead title="Mesaje" sub="Anunțuri și conversații — separat de rețelele tale" icon={<Icons.inbox />} bare />
-        <FluidTabs id="inbox" active={tab} onChange={setTab} tabs={[{ id: 'ann', label: 'Anunțuri', icon: <Icons.bell size={15} /> }, { id: 'chat', label: 'Conversații', icon: <Icons.chat size={15} /> }]} />
-      </div>
-      <AnimatePresence mode="wait">
-        {tab === 'ann'
-          ? <motion.div key="ann" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><AnnouncementsPanel /></motion.div>
-          : <motion.div key="chat" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><ChatPanel /></motion.div>}
-      </AnimatePresence>
-    </div>
-  );
-}
-function AnnouncementsPanel() {
-  const { data, mutate } = useApp();
-  const SAMPLE = 'Lucrarea de joi acoperă funcția de gradul I și II. Rezolvați fișa de la pag. 48-49 până joi. Vineri avem ascultare la geografie. Nu uitați eseul despre Ion până miercuri.';
-  const [text, setText] = useState(SAMPLE);
-  const [tasks, setTasks] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [imported, setImported] = useState(false);
-  const [sel, setSel] = useState(null);
-  const run = () => { setBusy(true); setTasks(null); setImported(false); API.post('/api/parse', { text }).then((r) => { setTasks(r.tasks); setBusy(false); }); };
-  const importAll = () => { mutate(API.post('/api/tasks/import', { tasks })); setImported(true); };
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-      <section className="lg:col-span-2 rounded-xl2 border border-brand-100 bg-gradient-to-b from-brand-50/70 to-white p-5 shadow-card">
-        <h2 className="flex items-center gap-2 font-display text-lg font-700"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand text-white"><Icons.magic size={16} /></span> Din mesaj → sarcini</h2>
-        <p className="mt-1 text-[13px] text-muted">Lipește un mesaj de pe grup sau o poză cu tabla. SchoolPilot scoate ce ai de făcut și pune datele.</p>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} className="mt-3 w-full resize-none rounded-xl border border-line bg-white p-3 text-[13.5px] leading-relaxed outline-none focus:border-brand" />
-        <div className="mt-3 flex items-center gap-2">
-          <ShimmerButton icon={busy ? <Spinner /> : <Icons.spark size={16} />} onClick={run} disabled={busy} className="flex-1">{busy ? 'Analizez…' : 'Transformă în sarcini'}</ShimmerButton>
-          <button className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-white text-muted hover:bg-paper" title="Încarcă o poză"><Icons.camera size={18} /></button>
-        </div>
-        <AnimatePresence mode="wait">
-          {tasks && (
-            <motion.div key="res" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-4">
-              <p className="mb-2 text-[12px] font-700 text-brand-600">{tasks.length} sarcini găsite</p>
-              <ul className="space-y-2">
-                {tasks.map((t, i) => (
-                  <motion.li key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08, ...spring }} className="flex items-start gap-2.5 rounded-xl border border-line bg-white p-3">
-                    <span className="mt-0.5 grid h-5 w-5 place-items-center rounded-md border-2 border-line" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13.5px] font-600 leading-snug">{t.title}</p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <Pill tone={t.type === 'test' ? 'heavy' : 'brand'} className={t.type === 'test' ? 'bg-heat-heavybg' : ''}>{t.typeLabel}</Pill>
-                        {t.dateLabel && <Pill><Icons.calendar size={12} /> {t.dateLabel}</Pill>}
-                        {t.pages && <Pill><Icons.book size={12} /> pag. {t.pages}</Pill>}
-                      </div>
-                    </div>
-                  </motion.li>
-                ))}
-              </ul>
-              <button onClick={importAll} disabled={imported} className={cx('mt-3 w-full rounded-xl py-2.5 text-sm font-700 text-white transition-colors', imported ? 'bg-heat-calm' : 'bg-ink hover:bg-ink/90')}>{imported ? '✓ Adăugate în lista ta' : 'Adaugă toate în listă'}</button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
-
-      <section className="lg:col-span-3">
-        <div className="space-y-3">
-          {data.announcements.map((a) => (
-            <motion.button key={a.id} layoutId={`ann-${a.id}`} onClick={() => setSel(a)} className="flex w-full items-start gap-3 rounded-xl2 border border-line bg-white p-4 text-left shadow-card hover:border-brand-100">
-              <motion.span layoutId={`ann-dot-${a.id}`} className="mt-1"><SubjectDot code={a.subject} size={14} /></motion.span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2"><motion.span layoutId={`ann-subj-${a.id}`} className="font-700">{a.name}</motion.span>{a.pinned && <Icons.pin size={14} className="text-brand" />}{a.priority === 'urgent' && <Pill tone="heavy" className="bg-heat-heavybg">urgent</Pill>}{a.priority === 'info' && <Pill>info</Pill>}</div>
-                <div className="text-[12px] text-muted">{a.teacher} · {a.when}</div>
-                <p className="mt-1.5 line-clamp-2 text-[13.5px] text-ink/75">{a.text}</p>
-              </div>
-              <Icons.chevR size={18} className="shrink-0 text-line" />
-            </motion.button>
-          ))}
-        </div>
-      </section>
-
-      <Sheet open={!!sel} onClose={() => setSel(null)} labelledBy="ann-title">
-        {sel && (
-          <motion.div layoutId={`ann-${sel.id}`} className="relative z-10 w-full max-w-lg rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2">
-            <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3"><motion.span layoutId={`ann-dot-${sel.id}`}><SubjectDot code={sel.subject} size={16} /></motion.span><div><motion.h3 layoutId={`ann-subj-${sel.id}`} id="ann-title" className="font-display text-xl font-700">{sel.name}</motion.h3><p className="text-sm text-muted">{sel.teacher} · {sel.when}</p></div></div>
-              <button onClick={() => setSel(null)} className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-paper"><Icons.x size={18} /></button>
-            </div>
-            <p className="mt-4 text-[15px] leading-relaxed text-ink/85">{sel.text}</p>
-            <div className="mt-5 flex gap-2">
-              <ShimmerButton icon={<Icons.magic size={16} />} className="flex-1" onClick={() => { setText(sel.text); setSel(null); }}>Transformă în sarcini</ShimmerButton>
-              <button onClick={() => setSel(null)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Închide</button>
-            </div>
-          </motion.div>
-        )}
-      </Sheet>
-    </div>
-  );
-}
-function ChatPanel() {
-  const { data, mutate, refresh } = useApp();
-  const msgs = data.messages.items;
-  const quiet = data.messages.quiet;
-  const [draft, setDraft] = useState('');
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' }); }, [msgs.length]);
-  const send = () => { const t = draft.trim(); if (!t) return; setDraft(''); mutate(API.post('/api/messages', { text: t })); };
-  const toggleQuiet = () => mutate(API.post('/api/settings', { quiet: !quiet }));
-  return (
-    <div className="mx-auto flex h-[66vh] max-w-2xl flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
-      <div className="flex items-center gap-3 border-b border-line p-4">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-50 font-display font-700 text-brand-600">AI</span>
-        <div className="flex-1"><p className="font-700">d-na Ionescu</p><p className="text-[12px] text-muted">Matematică · de obicei răspunde dimineața</p></div>
-        <button onClick={toggleQuiet} className={cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-700 transition-colors', quiet ? 'bg-ink text-white' : 'bg-paper text-muted')}><Icons.moon size={13} /> Ore liniștite {quiet ? 'on' : 'off'}</button>
-      </div>
-      <AnimatePresence>
-        {quiet && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-ink/[.03] px-4">
-            <p className="flex items-center gap-2 py-2.5 text-[12.5px] text-muted"><Icons.moon size={14} /> Orele liniștite sunt active (21:00–07:00). Mesajele trimise noaptea ajung la profesor dimineață la <b className="text-ink">07:00</b>.</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <div className="flex-1 space-y-3 overflow-y-auto bg-paper/40 p-4">
-        {msgs.map((m) => (
-          <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring} className={cx('flex', m.from === 'me' ? 'justify-end' : 'justify-start')}>
-            <div className={cx('max-w-[78%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-snug shadow-pill', m.from === 'me' ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-white text-ink ring-1 ring-line')}>
-              <p>{m.text}</p>
-              <p className={cx('mt-1 flex items-center gap-1 text-[11px]', m.from === 'me' ? 'text-white/70' : 'text-muted')}>{m.scheduled && <><Icons.moon size={11} /> ajunge la {m.deliverAt} ·</>} {m.time}</p>
-            </div>
-          </motion.div>
-        ))}
-        <div ref={endRef} />
-      </div>
-      <div className="border-t border-line p-3">
-        <div className="flex items-center gap-2 rounded-xl border border-line bg-white p-1.5 focus-within:border-brand">
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Scrie un mesaj politicos…" className="flex-1 bg-transparent px-2 py-1.5 text-[14px] outline-none placeholder:text-muted/70" />
-          <button onClick={send} disabled={!draft.trim()} className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-white hover:bg-brand-600 active:scale-95 disabled:opacity-40"><Icons.send size={16} /></button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ================= Privacy ================= */
-function PrivacySheet({ open, onClose }) {
-  const points = [
-    ['Date minime', 'Doar ce ține de școală: orar, note, anunțuri. Fără urmărire, fără reclame.'],
-    ['Consimțământ parental', 'Conturile elevilor sub 16 ani se activează cu acordul unui părinte.'],
-    ['Găzduit în UE', 'Datele stau pe servere din Uniunea Europeană, criptate.'],
-    ['Tu controlezi', 'Elevii mari aleg ce văd părinții. Îți poți exporta sau șterge datele oricând.'],
-  ];
-  return (
-    <Sheet open={open} onClose={onClose} labelledBy="priv-title">
-      {open && (
-        <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring} className="relative z-10 w-full max-w-md rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2">
-          <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />
-          <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand"><Icons.shield size={22} /></span><h3 id="priv-title" className="font-display text-xl font-700">Confidențialitate pentru minori</h3></div>
-          <ul className="mt-5 space-y-3">
-            {points.map(([t, d]) => <li key={t} className="flex gap-3"><span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-heat-calmbg text-heat-calm"><Icons.check size={14} sw={3} /></span><div><p className="text-sm font-700">{t}</p><p className="text-[13px] text-muted">{d}</p></div></li>)}
-          </ul>
-          <button onClick={onClose} className="mt-6 w-full rounded-xl bg-ink py-2.5 font-700 text-white hover:bg-ink/90">Am înțeles</button>
-        </motion.div>
-      )}
-    </Sheet>
-  );
-}
-
-/* ================= Shell ================= */
-const NAV = [
-  { id: 'today', label: 'Azi', icon: Icons.sun },
-  { id: 'timetable', label: 'Orar', icon: Icons.grid },
-  { id: 'workload', label: 'Încărcare', icon: Icons.pulse },
-  { id: 'marks', label: 'Catalog', icon: Icons.chart },
-  { id: 'inbox', label: 'Mesaje', icon: Icons.inbox },
-];
-const ROLES = { student: 'Elev', teacher: 'Profesor', parent: 'Părinte' };
-
 function Logo({ size = 36 }) {
   return (
     <span className="grid shrink-0 place-items-center rounded-xl bg-brand text-white shadow-card" style={{ width: size, height: size }}>
@@ -820,118 +231,769 @@ function Logo({ size = 36 }) {
     </span>
   );
 }
-function RolePicker({ role, setRole, open, setOpen }) {
+
+/* ================= SHARED: subject pickers ================= */
+function SubjectSelect({ subjects, value, onChange }) {
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-left hover:bg-paper">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-600"><Icons.user size={17} /></span>
-        <span className="flex-1"><span className="block text-[13px] font-700">Ana Popescu</span><span className="block text-[11px] text-muted">{ROLES[role]}</span></span>
-        <Icons.chevD size={16} className={cx('text-muted transition-transform', open && 'rotate-180')} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-xl border border-line bg-white p-1 shadow-lift">
-            {Object.keys(ROLES).map((r) => <button key={r} onClick={() => { setRole(r); setOpen(false); }} className={cx('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13.5px] font-700', role === r ? 'bg-brand-50 text-brand-600' : 'hover:bg-paper')}><Icons.user size={16} /> {ROLES[r]} {role === r && <Icons.check size={15} className="ml-auto" />}</button>)}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <select value={value || ''} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand">
+      <option value="" disabled>Alege materia…</option>
+      {subjects.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+    </select>
+  );
+}
+function SubjectChips({ subjects, selected, toggle }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {subjects.map((s) => { const on = selected.includes(s.code); return (
+        <button key={s.code} type="button" onClick={() => toggle(s.code)} className={cx('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-700 ring-1 transition-colors', on ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>
+          <Dot hue={on ? '#fff' : s.hue} size={8} />{s.short}
+        </button>
+      ); })}
     </div>
   );
 }
 
-function Splash() {
-  return <div className="graph-paper grid min-h-screen place-items-center">
-    <div className="flex flex-col items-center gap-3 text-muted"><Logo size={48} /><span className="flex items-center gap-2 text-sm font-600"><Spinner size={18} /> Se încarcă SchoolPilot…</span></div>
-  </div>;
+/* ================= WORKLOAD heatmap (teacher) ================= */
+function Heatmap({ wl, typeLabel }) {
+  const reduce = useReducedMotion();
+  return (
+    <div className="space-y-4">
+      {wl.weeks.map((wk, wi) => (
+        <section key={wi} className="rounded-xl2 border border-line bg-white p-4 shadow-card sm:p-5">
+          <h3 className="mb-3 text-sm font-700 text-muted">{wk.label}</h3>
+          <div className="grid grid-cols-5 gap-2 sm:gap-3">
+            {wk.days.map((d, i) => { const h = HEAT[d.heat.k]; return (
+              <motion.div key={i} initial={reduce ? false : { opacity: 0, scale: .92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: (wi * 5 + i) * 0.03, ...spring }}
+                className="relative flex flex-col rounded-xl p-2.5 sm:p-3" style={{ background: h.bg, boxShadow: d.clash ? `inset 0 0 0 2px ${h.ring}` : 'none' }}>
+                <div className="flex items-center justify-between"><span className="text-[12px] font-700" style={{ color: h.fg }}>{d.dateLabel}</span>{d.clash && <Icons.alert size={13} style={{ color: h.fg }} />}</div>
+                <div className="mt-2 flex-1 space-y-1">
+                  {d.items.length === 0 && <span className="text-[11px]" style={{ color: h.fg, opacity: .7 }}>liber</span>}
+                  {d.items.map((t, j) => <div key={j} className="truncate rounded-md bg-white/70 px-1.5 py-1 text-[10.5px] font-600 leading-tight" style={{ color: h.fg }}>{t.short} · {typeLabel[t.type].toLowerCase()}</div>)}
+                </div>
+                <span className="mt-2 text-[10px] font-700 uppercase tracking-wide" style={{ color: h.fg, opacity: .8 }}>{d.heat.label}</span>
+              </motion.div>
+            ); })}
+          </div>
+        </section>
+      ))}
+      <div className="flex flex-wrap items-center gap-2">
+        {[['calm', 'ușor'], ['light', 'moderat'], ['busy', 'încărcat'], ['heavy', 'supraîncărcat']].map(([k, l]) => <span key={k} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-700" style={{ background: HEAT[k].bg, color: HEAT[k].fg }}>{l}</span>)}
+      </div>
+    </div>
+  );
 }
 
-function App() {
-  const [data, setData] = useState(null);
-  const [role, setRole] = useState('student');
-  const [view, setView] = useState('today');
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [privOpen, setPrivOpen] = useState(false);
-  const [err, setErr] = useState(null);
+/* ================= TIMETABLE grid (read-only, student) ================= */
+function TimetableGrid({ tt, onCell }) {
   const reduce = useReducedMotion();
-
-  const refresh = useCallback(() => API.state(role).then(setData).catch((e) => setErr(String(e))), [role]);
-  useEffect(() => { refresh(); }, [refresh]);
-  const mutate = useCallback((promise) => promise.then((res) => { if (res && res.today) setData(res); return res; }).catch((e) => setErr(String(e))), []);
-
-  useEffect(() => {
-    const apply = () => { const h = location.hash.replace('#', ''); if (NAV.some((n) => n.id === h)) setView(h); };
-    apply(); window.addEventListener('hashchange', apply); return () => window.removeEventListener('hashchange', apply);
-  }, []);
-  const goto = (v) => { setView(v); try { history.replaceState(null, '', '#' + v); } catch (e) {} };
-
-  if (err) return <div className="graph-paper grid min-h-screen place-items-center p-6"><div className="max-w-sm rounded-xl2 border border-heat-heavy/30 bg-white p-6 text-center shadow-card"><Icons.alert className="mx-auto text-heat-heavy" size={28} /><p className="mt-2 font-700">Nu am putut contacta serverul</p><p className="mt-1 text-sm text-muted">Pornește backend-ul cu <code className="rounded bg-paper px-1">python3 server.py</code>, apoi reîncarcă.</p><p className="mt-2 text-[11px] text-muted">{err}</p></div></div>;
-  if (!data) return <Splash />;
-
-  const Views = { today: <TodayView onGoto={goto} />, timetable: <TimetableView />, workload: <WorkloadView />, marks: <MarksView />, inbox: <InboxView /> };
-
   return (
-    <Ctx.Provider value={{ data, role, setRole, refresh, mutate }}>
-      <MotionConfig reducedMotion="user">
-        <div className="graph-paper min-h-screen">
-          <div className="flex">
-            <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
-              <div className="flex items-center gap-2.5 px-2"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">Clasa {data.student.class}</p></div></div>
-              <nav className="mt-7 flex flex-col gap-1">
-                {NAV.map((n) => { const on = view === n.id; return (
-                  <button key={n.id} onClick={() => goto(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
-                    {on && <motion.span layoutId="rail-active" transition={spring} className="absolute inset-0 rounded-xl bg-brand-50 ring-1 ring-brand-100" />}
-                    <span className="relative z-10"><n.icon size={20} /></span><span className="relative z-10">{n.label}</span>
-                  </button>
-                ); })}
-              </nav>
-              <div className="mt-auto space-y-1">
-                <button onClick={() => setPrivOpen(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.shield size={19} /> Confidențialitate</button>
-                <RolePicker role={role} setRole={setRole} open={roleOpen} setOpen={setRoleOpen} />
+    <div className="overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card">
+      <div className="grid min-w-[760px] gap-2" style={{ gridTemplateColumns: '58px repeat(5, 1fr)' }}>
+        <div />
+        {DAYS.map((d, i) => <div key={d} className={cx('rounded-lg px-2 py-2 text-center text-sm font-700', i === tt.todayIdx ? 'bg-brand text-white' : 'text-ink')}>{d}</div>)}
+        {tt.periods.map((time, pi) => (
+          <React.Fragment key={time}>
+            <div className="flex items-start justify-end pr-1 pt-2 text-[12px] font-600 tnum text-muted">{time}</div>
+            {tt.days.map((day, di) => {
+              const cell = day[pi];
+              if (!cell) return <button key={di} onClick={() => onCell && onCell(di, pi, null)} className={cx('rounded-lg border border-dashed border-line/70 min-h-[46px]', onCell && 'hover:border-brand hover:bg-brand-50/40')} />;
+              return (
+                <motion.button key={di} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (pi * 5 + di) * 0.01 }}
+                  onClick={() => onCell && onCell(di, pi, cell)}
+                  className={cx('group relative rounded-lg border p-2 text-left hover:shadow-pill', di === tt.todayIdx ? 'border-brand-100 bg-brand-50/50' : 'border-line bg-white hover:border-brand-100')} style={{ borderLeft: `3px solid ${cell.hue}` }}>
+                  <div className="truncate text-[13px] font-700 leading-tight">{cell.short}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-muted">{cell.room || '—'}</div>
+                  {cell.assessment && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }} />}
+                </motion.button>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* =====================================================================
+ *  LOGIN
+ * ===================================================================== */
+function Login({ onPick }) {
+  const [accounts, setAccounts] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { API.get('/api/accounts').then((d) => setAccounts(d.accounts)).catch((e) => setErr(String(e.message || e))); }, []);
+  const roleMeta = { admin: { label: 'Administrator', icon: <Icons.building size={18} />, tone: '#0D9488' },
+                     teacher: { label: 'Profesor', icon: <Icons.teacher size={18} />, tone: '#7C3AED' },
+                     student: { label: 'Elev', icon: <Icons.user size={18} />, tone: '#E8650E' } };
+  return (
+    <div className="graph-paper min-h-screen">
+      <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-12">
+        <div className="mb-8 flex items-center gap-3">
+          <Logo size={44} />
+          <div><p className="font-display text-2xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">Alege contul cu care intri</p></div>
+        </div>
+        {err && <div className="mb-4 rounded-xl border border-heat-heavy/30 bg-white p-4 text-sm text-heat-heavy">Nu pot contacta serverul: {err}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</div>}
+        {!accounts && !err && <div className="flex items-center gap-2 text-muted"><Spinner size={18} /> Se încarcă…</div>}
+        {accounts && (
+          <motion.ul initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.05 } } }} className="space-y-2.5">
+            {accounts.map((a) => { const m = roleMeta[a.role] || roleMeta.student; return (
+              <motion.li key={a.id} variants={{ h: { opacity: 0, y: 12 }, s: { opacity: 1, y: 0 } }}>
+                <button onClick={() => onPick(a)} className="group flex w-full items-center gap-4 rounded-xl2 border border-line bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lift">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl font-display text-lg font-700 text-white" style={{ background: m.tone }}>{initials(a.name)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-700">{a.name}</span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted">
+                      <span className="inline-flex items-center gap-1 font-600" style={{ color: m.tone }}>{m.icon}{m.label}</span>
+                      {a.school && <span>· {a.school}</span>}{a.class && <span>· {a.class}</span>}
+                    </span>
+                  </span>
+                  <Icons.chevR className="shrink-0 text-line transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+                </button>
+              </motion.li>
+            ); })}
+          </motion.ul>
+        )}
+        {accounts && accounts.length === 1 && (
+          <p className="mt-5 rounded-xl bg-brand-50 p-3 text-[13px] text-brand-700">Deocamdată există doar contul de administrator. Intră ca Administrator și adaugă școli, profesori și elevi — apoi vor apărea aici.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* =====================================================================
+ *  SHELL (sidebar + mobile nav), used by all three roles
+ * ===================================================================== */
+function Shell({ account, nav, view, setView, onLogout, children }) {
+  const reduce = useReducedMotion();
+  const roleLabel = { admin: 'Administrator', teacher: 'Profesor', student: 'Elev' }[account.role];
+  return (
+    <MotionConfig reducedMotion="user">
+      <div className="graph-paper min-h-screen">
+        <div className="flex">
+          <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
+            <div className="flex items-center gap-2.5 px-2"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></div>
+            <nav className="mt-7 flex flex-col gap-1">
+              {nav.map((n) => { const on = view === n.id; return (
+                <button key={n.id} onClick={() => setView(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
+                  {on && <motion.span layoutId="rail-active" transition={spring} className="absolute inset-0 rounded-xl bg-brand-50 ring-1 ring-brand-100" />}
+                  <span className="relative z-10"><n.icon size={20} /></span><span className="relative z-10">{n.label}</span>
+                </button>
+              ); })}
+            </nav>
+            <div className="mt-auto rounded-xl border border-line bg-white p-2">
+              <div className="flex items-center gap-2.5 px-1 py-1">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 font-700 text-brand-600 text-[13px]">{initials(account.name)}</span>
+                <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[13px] font-700">{account.name}</span><span className="block truncate text-[11px] text-muted">{account.school || roleLabel}</span></span>
               </div>
-            </aside>
+              <button onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.logout size={17} /> Schimbă contul</button>
+            </div>
+          </aside>
 
-            <main className="min-w-0 flex-1">
-              <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-                <div className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></div>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => setPrivOpen(true)} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-paper"><Icons.shield size={19} /></button>
-                  <button onClick={() => setRoleOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {ROLES[role]}</button>
-                </div>
-              </header>
-              <AnimatePresence mode="wait">
-                <motion.div key={view} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? {} : { opacity: 0, y: -8 }} transition={{ duration: .22 }}>{Views[view]}</motion.div>
-              </AnimatePresence>
-            </main>
-          </div>
+          <main className="min-w-0 flex-1">
+            <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+              <div className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></div>
+              <button onClick={onLogout} className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.logout size={14} /> {roleLabel}</button>
+            </header>
+            <AnimatePresence mode="wait">
+              <motion.div key={view} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? {} : { opacity: 0, y: -8 }} transition={{ duration: .22 }}>{children}</motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
 
+        {nav.length > 1 && (
           <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/90 backdrop-blur lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="mx-auto flex max-w-md items-stretch justify-around px-2 py-1.5">
-              {NAV.map((n) => { const on = view === n.id; return (
-                <button key={n.id} onClick={() => goto(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
+              {nav.map((n) => { const on = view === n.id; return (
+                <button key={n.id} onClick={() => setView(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
                   {on && <motion.span layoutId="tab-active" transition={spring} className="absolute inset-x-2 top-0 h-1 rounded-full bg-brand" />}
                   <n.icon size={21} className={on ? 'text-brand' : 'text-muted'} /><span className={cx('text-[10.5px] font-700', on ? 'text-brand' : 'text-muted')}>{n.label}</span>
                 </button>
               ); })}
             </div>
           </nav>
-
-          <Sheet open={roleOpen} onClose={() => setRoleOpen(false)} labelledBy="role-title">
-            {roleOpen && (
-              <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }} transition={spring} className="relative z-10 w-full max-w-md rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2 lg:hidden">
-                <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line" />
-                <h3 id="role-title" className="font-display text-lg font-700">Schimbă rolul</h3><p className="text-[13px] text-muted">Aceeași aplicație, vedere adaptată.</p>
-                <div className="mt-4 grid grid-cols-3 gap-2">{Object.keys(ROLES).map((r) => <button key={r} onClick={() => { setRole(r); setRoleOpen(false); }} className={cx('rounded-xl border p-3 text-sm font-700', role === r ? 'border-brand bg-brand-50 text-brand-600' : 'border-line hover:bg-paper')}><Icons.user size={18} className="mx-auto mb-1" />{ROLES[r]}</button>)}</div>
-              </motion.div>
-            )}
-          </Sheet>
-          <PrivacySheet open={privOpen} onClose={() => setPrivOpen(false)} />
-        </div>
-      </MotionConfig>
-    </Ctx.Provider>
+        )}
+      </div>
+    </MotionConfig>
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+/* =====================================================================
+ *  ADMIN
+ * ===================================================================== */
+function AdminApp({ account, onLogout }) {
+  const [a, setA] = useState(null);
+  const [view] = useState('admin');
+  const [schoolId, setSchoolId] = useState(null);
+  const [tab, setTab] = useState('classes');
+  const load = useCallback(() => API.get('/api/admin').then(setA), []);
+  useEffect(() => { load(); }, [load]);
+  if (!a) return <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view="admin" setView={() => {}} onLogout={onLogout}><div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div></Shell>;
+  const school = a.schools.find((s) => s.id === schoolId) || null;
+  return (
+    <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view={view} setView={() => {}} onLogout={onLogout}>
+      <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
+        {!school
+          ? <AdminSchools a={a} reload={load} onOpen={(id) => { setSchoolId(id); setTab('classes'); }} />
+          : <AdminSchool a={a} school={school} tab={tab} setTab={setTab} back={() => setSchoolId(null)} reload={load} />}
+      </div>
+    </Shell>
+  );
+}
+
+function AdminSchools({ a, reload, onOpen }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const add = () => { if (!name.trim()) return; API.post('/api/schools', { name }).then(() => { setName(''); setAdding(false); reload(); }); };
+  const del = (s) => { if (confirm(`Ștergi „${s.name}” și tot ce conține?`)) API.del(`/api/schools/${s.id}`).then(reload); };
+  return (
+    <div>
+      <ViewHead title="Școli" sub="Adaugă o școală, apoi construiește clasele, profesorii, elevii și orarul." icon={<Icons.building />}
+        right={<ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAdding(true)}>Adaugă școală</ShimmerButton>} />
+      {a.schools.length === 0 && !adding && <Empty icon={<Icons.building size={26} />} title="Nicio școală încă" body="Începe prin a adăuga prima școală. Totul pornește de la zero — tu construiești structura." />}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {a.schools.map((s) => (
+          <div key={s.id} className="group rounded-xl2 border border-line bg-white p-5 shadow-card transition-all hover:border-brand-200">
+            <div className="flex items-start justify-between">
+              <button onClick={() => onOpen(s.id)} className="flex items-center gap-3 text-left">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand"><Icons.building size={22} /></span>
+                <span><span className="block font-700">{s.name}</span><span className="block text-[12.5px] text-muted">{s.classes.length} clase · {s.teachers.length} profesori · {s.students.length} elevi</span></span>
+              </button>
+              <button onClick={() => del(s)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 transition-opacity hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+            </div>
+            <button onClick={() => onOpen(s.id)} className="mt-4 inline-flex items-center gap-1 text-sm font-700 text-brand hover:text-brand-600">Deschide <Icons.chevR size={15} /></button>
+          </div>
+        ))}
+      </div>
+      <Sheet open={adding} onClose={() => setAdding(false)} labelledBy="sch-t">
+        {adding && <Modal>
+          <h3 id="sch-t" className="font-display text-xl font-700">Adaugă o școală</h3>
+          <div className="mt-4"><Field label="Numele școlii"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="ex. Colegiul Național Mihai Viteazul" /></Field></div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setAdding(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+        </Modal>}
+      </Sheet>
+    </div>
+  );
+}
+
+function AdminSchool({ a, school, tab, setTab, back, reload }) {
+  const tabs = [
+    { id: 'classes', label: 'Clase', icon: <Icons.users size={15} /> },
+    { id: 'teachers', label: 'Profesori', icon: <Icons.teacher size={15} /> },
+    { id: 'students', label: 'Elevi', icon: <Icons.user size={15} /> },
+    { id: 'timetable', label: 'Orar', icon: <Icons.grid size={15} /> },
+  ];
+  return (
+    <div>
+      <button onClick={back} className="mb-3 inline-flex items-center gap-1 text-sm font-700 text-muted hover:text-ink"><Icons.chevL size={16} /> Toate școlile</button>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ViewHead title={school.name} sub="Construiește structura școlii" bare />
+        <div className="overflow-x-auto no-scrollbar"><FluidTabs id="admin" active={tab} onChange={setTab} tabs={tabs} /></div>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .18 }}>
+          {tab === 'classes' && <AdminClasses school={school} reload={reload} />}
+          {tab === 'teachers' && <AdminTeachers a={a} school={school} reload={reload} />}
+          {tab === 'students' && <AdminStudents school={school} reload={reload} />}
+          {tab === 'timetable' && <AdminTimetable a={a} school={school} reload={reload} />}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function AdminClasses({ school, reload }) {
+  const [name, setName] = useState('');
+  const add = () => { if (!name.trim()) return; API.post('/api/classes', { schoolId: school.id, name }).then(() => { setName(''); reload(); }); };
+  const del = (c) => { if (confirm(`Ștergi clasa ${c.name}?`)) API.del(`/api/classes/${c.id}`).then(reload); };
+  return (
+    <div>
+      <div className="mb-4 flex items-end gap-2">
+        <div className="flex-1 sm:max-w-xs"><Field label="Nume clasă"><Input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="ex. 10B" /></Field></div>
+        <ShimmerButton icon={<Icons.plus size={18} />} onClick={add}>Adaugă</ShimmerButton>
+      </div>
+      {school.classes.length === 0 ? <Empty icon={<Icons.users size={26} />} title="Nicio clasă" body="Adaugă o clasă (ex. 9A, 10B). Elevii și orarul se leagă de o clasă." />
+        : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {school.classes.map((c) => (
+              <div key={c.id} className="group flex items-center justify-between rounded-xl2 border border-line bg-white p-4 shadow-card">
+                <div><p className="font-display text-xl font-700">{c.name}</p><p className="text-[12px] text-muted">{c.students} elevi · {c.slots} ore</p></div>
+                <button onClick={() => del(c)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+              </div>
+            ))}
+          </div>}
+    </div>
+  );
+}
+
+function AdminTeachers({ a, school, reload }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [subs, setSubs] = useState([]);
+  const add = () => { if (!name.trim()) return; API.post('/api/teachers', { schoolId: school.id, name, subjects: subs }).then(() => { setName(''); setSubs([]); setOpen(false); reload(); }); };
+  const del = (t) => { if (confirm(`Ștergi profesorul ${t.name}?`)) API.del(`/api/users/${t.id}`).then(reload); };
+  const subjName = (code) => (a.subjects.find((s) => s.code === code) || {}).short || code;
+  return (
+    <div>
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setOpen(true)}>Adaugă profesor</ShimmerButton></div>
+      {school.teachers.length === 0 ? <Empty icon={<Icons.teacher size={26} />} title="Niciun profesor" body="Adaugă profesori și materiile pe care le predau. Apoi îi poți pune în orar." />
+        : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+            {school.teachers.map((t, i) => (
+              <div key={t.id} className={cx('group flex items-center gap-3 p-4', i && 'border-t border-line')}>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#7C3AED]/10 font-700 text-[#7C3AED] text-[13px]">{initials(t.name)}</span>
+                <div className="min-w-0 flex-1"><p className="truncate font-700">{t.name}</p><p className="truncate text-[12.5px] text-muted">{t.subjects.length ? t.subjects.map(subjName).join(', ') : 'fără materii'}</p></div>
+                <button onClick={() => del(t)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+              </div>
+            ))}
+          </div>}
+      <Sheet open={open} onClose={() => setOpen(false)} labelledBy="t-t">
+        {open && <Modal>
+          <h3 id="t-t" className="font-display text-xl font-700">Adaugă profesor</h3>
+          <div className="mt-4 space-y-4">
+            <Field label="Nume"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. d-na Ionescu" /></Field>
+            <div><span className="mb-1 block text-[12px] font-700 text-muted">Materii predate</span><SubjectChips subjects={a.subjects} selected={subs} toggle={(c) => setSubs((s) => s.includes(c) ? s.filter((x) => x !== c) : [...s, c])} /></div>
+          </div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+        </Modal>}
+      </Sheet>
+    </div>
+  );
+}
+
+function AdminStudents({ school, reload }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [classId, setClassId] = useState(school.classes[0] ? String(school.classes[0].id) : '');
+  const add = () => { if (!name.trim()) return; API.post('/api/students', { schoolId: school.id, name, classId: classId ? Number(classId) : null }).then(() => { setName(''); setOpen(false); reload(); }); };
+  const del = (s) => { if (confirm(`Ștergi elevul ${s.name}?`)) API.del(`/api/users/${s.id}`).then(reload); };
+  return (
+    <div>
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => { setClassId(school.classes[0] ? String(school.classes[0].id) : ''); setOpen(true); }}>Adaugă elev</ShimmerButton></div>
+      {school.classes.length === 0 && <p className="mb-3 rounded-xl bg-heat-lightbg/60 p-3 text-[13px] text-heat-light">Adaugă întâi o clasă, ca să poți repartiza elevii.</p>}
+      {school.students.length === 0 ? <Empty icon={<Icons.user size={26} />} title="Niciun elev" body="Adaugă elevi și repartizează-i la o clasă. Fiecare elev va avea propriul cont." />
+        : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+            {school.students.map((s, i) => (
+              <div key={s.id} className={cx('group flex items-center gap-3 p-4', i && 'border-t border-line')}>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#E8650E]/10 font-700 text-[#E8650E] text-[13px]">{initials(s.name)}</span>
+                <div className="min-w-0 flex-1"><p className="truncate font-700">{s.name}</p><p className="text-[12.5px] text-muted">{s.className || 'fără clasă'}</p></div>
+                <button onClick={() => del(s)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+              </div>
+            ))}
+          </div>}
+      <Sheet open={open} onClose={() => setOpen(false)} labelledBy="s-t">
+        {open && <Modal>
+          <h3 id="s-t" className="font-display text-xl font-700">Adaugă elev</h3>
+          <div className="mt-4 space-y-4">
+            <Field label="Nume"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Ana Popescu" /></Field>
+            <Field label="Clasă"><select value={classId} onChange={(e) => setClassId(e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand"><option value="">— fără clasă —</option>{school.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+          </div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setOpen(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+        </Modal>}
+      </Sheet>
+    </div>
+  );
+}
+
+function AdminTimetable({ a, school, reload }) {
+  const [classId, setClassId] = useState(school.classes[0] ? school.classes[0].id : null);
+  const [tt, setTt] = useState(null);
+  const [edit, setEdit] = useState(null); // {day, period, cell}
+  const loadTT = useCallback(() => { if (classId) API.get(`/api/timetable?classId=${classId}`).then(setTt); }, [classId]);
+  useEffect(() => { loadTT(); }, [loadTT]);
+  if (school.classes.length === 0) return <Empty icon={<Icons.grid size={26} />} title="Fără orar încă" body="Adaugă o clasă întâi, apoi construiește orarul oră cu oră." />;
+  const grid = tt ? { periods: tt.periods, todayIdx: tt.todayIdx, days: tt.grid[0].map((_, pi) => null) && [0, 1, 2, 3, 4].map((di) => tt.grid[di]) } : null;
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-700 text-muted">Clasa:</span>
+        {school.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1 transition-colors', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
+      </div>
+      <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi ora. Punct roșu = are o evaluare programată de profesor.</p>
+      {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell) => setEdit({ day, period, cell })} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      <Sheet open={!!edit} onClose={() => setEdit(null)} labelledBy="tt-e">
+        {edit && <TimetableCellEditor a={a} school={school} classId={classId} edit={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); loadTT(); reload(); }} />}
+      </Sheet>
+    </div>
+  );
+}
+
+function TimetableCellEditor({ a, school, classId, edit, onClose, onSaved }) {
+  const existing = edit.cell;
+  const [subject, setSubject] = useState(existing ? existing.subject : '');
+  const [teacherId, setTeacherId] = useState(existing && existing.teacherId ? String(existing.teacherId) : '');
+  const [room, setRoom] = useState(existing ? existing.room : '');
+  const save = () => { if (!subject) return; API.post('/api/timetable', { classId, day: edit.day, period: edit.period, subject, teacherId: teacherId ? Number(teacherId) : null, room }).then(onSaved); };
+  const remove = () => { if (existing) API.del(`/api/timetable/${existing.id}`).then(onSaved); };
+  // teachers that teach this subject first, then the rest
+  const teachers = [...school.teachers].sort((x, y) => (y.subjects.includes(subject) ? 1 : 0) - (x.subjects.includes(subject) ? 1 : 0));
+  return (
+    <Modal>
+      <h3 id="tt-e" className="font-display text-xl font-700">{DAYS[edit.day]} · ora {edit.period + 1}</h3>
+      <p className="text-sm text-muted">{a.periods[edit.period]}</p>
+      <div className="mt-4 space-y-4">
+        <Field label="Materie"><SubjectSelect subjects={a.subjects} value={subject} onChange={setSubject} /></Field>
+        <Field label="Profesor"><select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand">
+          <option value="">— alege profesor —</option>
+          {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}{subject && t.subjects.includes(subject) ? ' ✓' : ''}</option>)}
+        </select></Field>
+        <Field label="Sala"><Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="ex. A24 / Lab F" /></Field>
+      </div>
+      <div className="mt-5 flex gap-2">
+        <ShimmerButton className="flex-1" onClick={save}>{existing ? 'Actualizează' : 'Pune în orar'}</ShimmerButton>
+        {existing && <button onClick={remove} className="grid place-items-center rounded-xl border border-line px-4 text-heat-heavy hover:bg-heat-heavybg"><Icons.trash size={18} /></button>}
+        <button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Închide</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* =====================================================================
+ *  TEACHER
+ * ===================================================================== */
+const TYPE_LABEL = { test: 'Lucrare', quiz: 'Ascultare', tema: 'Temă' };
+function TeacherApp({ account, onLogout }) {
+  const [view, setView] = useState('schedule');
+  const [t, setT] = useState(null);
+  const load = useCallback(() => API.get(`/api/teacher?userId=${account.id}`).then(setT), [account.id]);
+  useEffect(() => { load(); }, [load]);
+  const nav = [{ id: 'schedule', label: 'Orarul meu', icon: Icons.grid }, { id: 'workload', label: 'Încărcare', icon: Icons.pulse }];
+  return (
+    <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
+      <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
+        {!t ? <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>
+          : view === 'schedule' ? <TeacherSchedule t={t} /> : <TeacherWorkload t={t} />}
+      </div>
+    </Shell>
+  );
+}
+function TeacherSchedule({ t }) {
+  const hasAny = t.schedule.some((d) => d.length);
+  return (
+    <div>
+      <ViewHead title="Orarul meu" sub={t.classes.length ? `Orele tale la ${t.classes.map((c) => c.name).join(', ')}` : 'Doar orele tale'} icon={<Icons.grid />} />
+      {!hasAny ? <Empty icon={<Icons.grid size={26} />} title="Nu ai ore încă" body="Administratorul te pune în orar. Odată adăugat, vei vedea aici doar orele tale." />
+        : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {DAYS.map((day, di) => (
+              <section key={di} className={cx('rounded-xl2 border bg-white p-4 shadow-card', di === t.todayIdx ? 'border-brand-200 ring-1 ring-brand-100' : 'border-line')}>
+                <h3 className={cx('mb-3 text-sm font-700', di === t.todayIdx ? 'text-brand-600' : 'text-ink')}>{day}{di === t.todayIdx && <span className="ml-1 text-[11px] font-600 text-brand">azi</span>}</h3>
+                <div className="space-y-2">
+                  {t.schedule[di].length === 0 && <p className="text-[12.5px] text-muted">liber</p>}
+                  {t.schedule[di].map((s, i) => (
+                    <div key={i} className="rounded-xl border border-line p-2.5" style={{ borderLeft: `3px solid ${s.hue}` }}>
+                      <div className="flex items-center justify-between"><span className="text-[12px] font-700 tnum text-muted">{s.time}</span><span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-700 text-brand-600">{s.className}</span></div>
+                      <p className="mt-1 text-[13.5px] font-700 leading-tight">{s.subjectName}</p>
+                      <p className="text-[11.5px] text-muted">{s.room || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>}
+    </div>
+  );
+}
+function TeacherWorkload({ t }) {
+  const [classId, setClassId] = useState(t.classes[0] ? t.classes[0].id : null);
+  const [wl, setWl] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const load = useCallback(() => { if (classId) API.get(`/api/teacher/workload?classId=${classId}`).then(setWl); }, [classId]);
+  useEffect(() => { load(); }, [load]);
+  if (t.classes.length === 0) return <div><ViewHead title="Încărcare" sub="Harta evaluărilor pe clasă" icon={<Icons.pulse />} /><Empty icon={<Icons.pulse size={26} />} title="Nicio clasă" body="Vei vedea harta de încărcare după ce ai ore în orar." /></div>;
+  const myClass = t.classes.find((c) => c.id === classId);
+  return (
+    <div>
+      <ViewHead title="Încărcare" icon={<Icons.pulse />} sub="Vezi cât de plină e săptămâna clasei înainte să programezi o evaluare"
+        right={<ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="hidden sm:inline-flex">Programează o lucrare</ShimmerButton>} />
+      {t.classes.length > 1 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-[12px] font-700 text-muted">Clasa:</span>
+          {t.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
+        </div>
+      )}
+      {wl && wl.collisions.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl2 border border-heat-heavy/25 bg-heat-heavybg/60 p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-heat-heavy shadow-sm"><Icons.alert size={18} /></span>
+          <div className="text-sm"><p className="font-700 text-heat-heavy">Coliziune de evaluări în {myClass.name}</p>
+            {wl.collisions.map((c, i) => <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()})`).join(' + ')}. Ia în calcul o altă zi.</p>)}
+          </div>
+        </div>
+      )}
+      {wl ? <Heatmap wl={wl} typeLabel={TYPE_LABEL} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      <ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="mt-4 w-full sm:hidden">Programează o lucrare</ShimmerButton>
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="a-t">
+        {addOpen && <ScheduleTest t={t} classId={classId} className={myClass.name} suggestions={wl ? wl.suggestions : []} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); load(); }} />}
+      </Sheet>
+    </div>
+  );
+}
+function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) {
+  const mySubs = t.subjectCatalog.filter((s) => t.teacher.subjects.includes(s.code));
+  const [subject, setSubject] = useState(mySubs[0] ? mySubs[0].code : '');
+  const [type, setType] = useState('test');
+  const [dateISO, setDateISO] = useState('');
+  const [title, setTitle] = useState('');
+  const save = () => { if (!subject || !dateISO) return; API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type], teacherId: t.teacher.id }).then(onSaved); };
+  return (
+    <Modal>
+      <h3 id="a-t" className="font-display text-xl font-700">Programează o evaluare · {className}</h3>
+      <p className="mt-1 text-sm text-muted">SchoolPilot îți arată zilele cele mai libere ale clasei.</p>
+      <div className="mt-4 space-y-4">
+        <Field label="Materie"><SubjectSelect subjects={mySubs.length ? mySubs : t.subjectCatalog} value={subject} onChange={setSubject} /></Field>
+        <div><span className="mb-1 block text-[12px] font-700 text-muted">Tip</span>
+          <div className="flex gap-1.5">{['test', 'quiz', 'tema'].map((k) => <button key={k} onClick={() => setType(k)} className={cx('flex-1 rounded-lg px-2 py-2 text-[13px] font-700 ring-1', type === k ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{TYPE_LABEL[k]}</button>)}</div>
+        </div>
+        {suggestions.length > 0 && <div><span className="mb-1.5 block text-[12px] font-700 text-heat-calm">Zile recomandate (clasa e cel mai liberă)</span>
+          <div className="flex flex-wrap gap-1.5">{suggestions.map((d) => { const h = HEAT[d.heat.k]; return <button key={d.date} onClick={() => setDateISO(d.date)} className={cx('rounded-lg px-2.5 py-1.5 text-[13px] font-700 ring-1', dateISO === d.date ? 'ring-brand' : 'ring-transparent')} style={{ background: h.bg, color: h.fg }}>{d.dateLabel}</button>; })}</div>
+        </div>}
+        <Field label="Data"><Input type="date" value={dateISO} min={todayISO()} onChange={(e) => setDateISO(e.target.value)} /></Field>
+        <Field label="Titlu (opțional)"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex. Lucrare — funcții" /></Field>
+      </div>
+      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Programează</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+    </Modal>
+  );
+}
+
+/* =====================================================================
+ *  STUDENT
+ * ===================================================================== */
+function StudentApp({ account, onLogout }) {
+  const [view, setView] = useState('today');
+  const [s, setS] = useState(null);
+  const load = useCallback(() => API.get(`/api/student?userId=${account.id}`).then(setS), [account.id]);
+  useEffect(() => { load(); }, [load]);
+  const nav = [{ id: 'today', label: 'Azi', icon: Icons.sun }, { id: 'timetable', label: 'Orar', icon: Icons.grid }, { id: 'marks', label: 'Catalog', icon: Icons.chart }];
+  return (
+    <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
+      <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
+        {!s ? <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>
+          : view === 'today' ? <StudentToday s={s} reload={load} onGoto={setView} />
+          : view === 'timetable' ? <StudentTimetable s={s} />
+          : <StudentMarks s={s} reload={load} />}
+      </div>
+    </Shell>
+  );
+}
+function StudentToday({ s, reload, onGoto }) {
+  const reduce = useReducedMotion();
+  const t = s.today;
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const stagger = (i) => reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.05 + i * 0.07, ...spring } };
+  const toggle = (task) => API.patch(`/api/tasks/${task.id}`, { done: !task.done }).then(reload);
+  const addTask = () => { const title = draft.trim(); if (!title) { setAdding(false); return; } setDraft(''); setAdding(false); API.post('/api/tasks', { studentId: s.student.id, title, type: 'tema', due: todayISO() }).then(reload); };
+  if (!s.student.classId) return <div><ViewHead title={`Bună, ${s.student.name.split(' ')[0]}`} icon={<Icons.sun />} /><Empty icon={<Icons.sun size={26} />} title="Încă nu ești într-o clasă" body="Administratorul te repartizează la o clasă și îți adaugă orarul. Apoi aici apare rezumatul zilei tale." /></div>;
+  return (
+    <div>
+      <motion.header {...stagger(0)} className="relative overflow-hidden rounded-xl2 bg-ink p-6 text-white shadow-lift sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand/40 blur-3xl" />
+        <div className="pointer-events-none absolute right-24 top-12 h-28 w-28 rounded-full bg-brand/20 blur-2xl" />
+        <div className="relative">
+          <p className="flex items-center gap-2 text-sm font-500 text-white/60"><Icons.sun size={16} /> {t.dateLabel} · {s.student.class}</p>
+          <h1 className="mt-2 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight text-ink">{t.classes.length} ore</span>{t.due.length > 0 && <> și <span className="highlight text-ink">{t.due.length} de predat</span></>}.</h1>
+          <p className="mt-2 max-w-xl text-[15px] text-white/70">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
+          <div className="mt-5 flex flex-wrap items-center gap-3"><ShimmerButton icon={<Icons.grid size={18} />} onClick={() => onGoto('timetable')}>Vezi orarul</ShimmerButton></div>
+        </div>
+      </motion.header>
+
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <motion.section {...stagger(1)} className="lg:col-span-2 rounded-xl2 border border-line bg-white p-5 shadow-card">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-700">Programul de azi</h2>{t.isWeekend && <Pill>weekend · previzualizare luni</Pill>}</div>
+          {t.classes.length === 0 ? <p className="rounded-xl bg-paper p-4 text-center text-[13px] text-muted">Nicio oră azi.</p>
+            : <ol className="relative"><span className="absolute left-[62px] top-2 bottom-2 w-px bg-line" />
+                {t.classes.map((c, i) => (
+                  <li key={i} className="relative flex items-stretch gap-4 py-1.5">
+                    <div className="w-12 shrink-0 pt-1 text-right text-[13px] font-600 tnum text-muted">{c.time}</div>
+                    <div className="relative z-10 mt-1.5 grid place-items-center"><span className={cx('h-3 w-3 rounded-full ring-4 ring-white', c.current ? 'bg-brand' : 'bg-line')} /></div>
+                    <div className={cx('flex min-w-0 flex-1 items-center justify-between rounded-xl px-3.5 py-2.5', c.current ? 'bg-brand-50 ring-1 ring-brand-100' : 'hover:bg-paper')}>
+                      <div className="min-w-0"><div className="flex items-center gap-2"><Dot hue={c.hue} /><span className="truncate font-700">{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>{c.teacher && <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>}</div>
+                      <span className="ml-3 shrink-0 rounded-lg bg-white px-2 py-1 text-[12px] font-700 text-ink shadow-pill ring-1 ring-line">{c.room || '—'}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>}
+        </motion.section>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
+            <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-lg font-700">De predat curând</h2><button onClick={() => setAdding(true)} className="inline-flex items-center gap-1 text-[13px] font-700 text-brand hover:text-brand-600"><Icons.plus size={14} /> adaugă</button></div>
+            {adding && <div className="mb-2 flex items-center gap-2"><Input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addTask(); if (e.key === 'Escape') { setAdding(false); setDraft(''); } }} placeholder="Ce ai de făcut?" /><button onClick={addTask} className="shrink-0 rounded-lg bg-brand px-3 py-2.5 text-sm font-700 text-white hover:bg-brand-600">Adaugă</button></div>}
+            <ul className="space-y-1">
+              <AnimatePresence initial={false}>
+                {t.due.length === 0 && !adding && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl bg-paper p-3 text-center text-[13px] text-muted">Nimic urgent — zi liniștită 🎉</motion.li>}
+                {t.due.map((task) => (
+                  <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                    {task.kind === 'task'
+                      ? <button onClick={() => toggle(task)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-paper">
+                          <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2', task.done ? 'border-brand bg-brand text-white' : 'border-line')}>{task.done && <Icons.check size={14} sw={3} />}</span>
+                          <span className="min-w-0 flex-1"><span className={cx('block truncate text-sm font-600', task.done && 'text-muted line-through')}>{task.title}</span><span className="block text-[12px] text-muted">{task.short ? task.short + ' · ' : ''}{task.typeLabel}</span></span>
+                          <Pill tone={task.bucket === 'today' ? 'heavy' : 'muted'} className={task.bucket === 'today' ? 'bg-heat-heavybg' : ''}>{task.dueLabel}</Pill>
+                        </button>
+                      : <div className="flex w-full items-center gap-3 rounded-xl p-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-heat-heavybg text-heat-heavy"><Icons.alert size={13} /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-600">{task.title}</span><span className="block text-[12px] text-muted">{task.short} · {task.typeLabel}</span></span><Pill tone={task.bucket === 'today' ? 'heavy' : 'muted'} className={task.bucket === 'today' ? 'bg-heat-heavybg' : ''}>{task.dueLabel}</Pill></div>}
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          </motion.section>
+          {t.pack.length > 0 && (
+            <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
+              <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-700"><Icons.bag size={18} className="text-brand" /> De pus în ghiozdan</h2>
+              <ul className="flex flex-wrap gap-2">{t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + i * 0.05 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}</ul>
+            </motion.section>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function StudentTimetable({ s }) {
+  return (
+    <div>
+      <ViewHead title="Orar" sub={s.hasTimetable ? `Săptămâna ${s.timetable.weekLabel} · azi evidențiat` : 'Orarul clasei tale'} icon={<Icons.grid />} />
+      {!s.hasTimetable ? <Empty icon={<Icons.grid size={26} />} title="Orarul nu e gata" body="Administratorul adaugă orarul clasei tale. Imediat ce e pus, apare aici." />
+        : <><TimetableGrid tt={s.timetable} /><p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-heavy" /> evaluare</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-light" /> temă</span></p></>}
+    </div>
+  );
+}
+function StudentMarks({ s, reload }) {
+  const [tab, setTab] = useState('grades');
+  return (
+    <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ViewHead title="Catalog" sub="Note, medii și absențe — regulile din România" icon={<Icons.chart />} bare />
+        <FluidTabs id="marks" active={tab} onChange={setTab} tabs={[{ id: 'grades', label: 'Note', icon: <Icons.chart size={15} /> }, { id: 'abs', label: 'Absențe', icon: <Icons.calendar size={15} /> }]} />
+      </div>
+      <AnimatePresence mode="wait">
+        {tab === 'grades' ? <motion.div key="g" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><GradesPanel s={s} reload={reload} /></motion.div>
+          : <motion.div key="a" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .2 }}><AbsencesPanel s={s} reload={reload} /></motion.div>}
+      </AnimatePresence>
+    </div>
+  );
+}
+function GradesPanel({ s, reload }) {
+  const g = s.grades;
+  const subjectList = Object.keys(s.subjects).map((c) => ({ code: c, ...s.subjects[c] }));
+  const [open, setOpen] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const animOverall = useCountUp(g.overall);
+  return (
+    <div>
+      {g.subjects.length > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Media generală" value={animOverall.toFixed(2)} tone="#0D9488" icon={<Icons.target size={16} />} />
+          <StatTile label="Materii" value={g.subjects.length} tone="#0E7490" icon={<Icons.book size={16} />} />
+          {g.best && <StatTile label="Cea mai bună" value={g.best.short} tone="#16A34A" icon={<Icons.spark size={16} />} sub={`media ${g.best.avg.toFixed(2)}`} />}
+          {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
+        </div>
+      )}
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)}>Adaugă o notă</ShimmerButton></div>
+      {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Adaugă notele pe măsură ce le primești și SchoolPilot îți calculează mediile și de ce notă mai ai nevoie." />
+        : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {g.subjects.map((sub) => (
+              <motion.div key={sub.code} layout className={cx('rounded-xl2 border bg-white p-4 shadow-card', sub.risk ? 'border-heat-heavy/30' : 'border-line')}>
+                <button onClick={() => setOpen(open === sub.code ? null : sub.code)} className="w-full text-left">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5"><Dot hue={sub.hue} size={12} /><span className="font-700">{sub.name}</span>{sub.risk && <Pill tone="heavy" className="bg-heat-heavybg">risc de corigență</Pill>}</div>
+                    <div className="flex items-center gap-3"><span className="font-display text-2xl font-700 tnum" style={{ color: sub.risk ? '#D92626' : '#12201E' }}>{sub.avg.toFixed(2)}</span><motion.span animate={{ rotate: open === sub.code ? 180 : 0 }}><Icons.chevD size={18} className="text-muted" /></motion.span></div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">{sub.values.map((gr, i) => <span key={i} className="grid h-8 w-8 place-items-center rounded-lg text-sm font-700 tnum" style={{ background: gr.v >= 9 ? '#DEF7E6' : gr.v >= 7 ? '#E7FBF7' : gr.v >= 5 ? '#FBF1CF' : '#FBDFDF', color: gr.v >= 9 ? '#0F7C39' : gr.v >= 7 ? '#0B7A72' : gr.v >= 5 ? '#946500' : '#AE1919' }}>{gr.v}</span>)}</div>
+                </button>
+                <AnimatePresence>{open === sub.code && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden"><div className="mt-4 border-t border-line pt-4"><WhatINeed s={s} subject={sub.code} avg={sub.avg} reload={reload} /></div></motion.div>}</AnimatePresence>
+              </motion.div>
+            ))}
+          </div>}
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="ag-t"><AddGrade s={s} subjects={subjectList} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }} /></Sheet>
+    </div>
+  );
+}
+function AddGrade({ s, subjects, onClose, onSaved }) {
+  const [subject, setSubject] = useState('');
+  const [value, setValue] = useState(8);
+  const save = () => { if (!subject) return; API.post('/api/grades', { studentId: s.student.id, subject, value }).then(onSaved); };
+  return (
+    <Modal>
+      <h3 id="ag-t" className="font-display text-xl font-700">Adaugă o notă</h3>
+      <div className="mt-4 space-y-4">
+        <Field label="Materie"><SubjectSelect subjects={subjects} value={subject} onChange={setSubject} /></Field>
+        <div><span className="mb-1 block text-[12px] font-700 text-muted">Nota</span><Stepper value={value} set={setValue} /></div>
+      </div>
+      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Salvează nota</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+    </Modal>
+  );
+}
+function WhatINeed({ s, subject, avg, reload }) {
+  const [target, setTarget] = useState(Math.min(10, Math.ceil(avg) + 1));
+  const [n, setN] = useState(1);
+  const [res, setRes] = useState(null);
+  useEffect(() => { const id = setTimeout(() => { API.post('/api/grades/what-if', { studentId: s.student.id, subject, target, n }).then(setRes); }, 160); return () => clearTimeout(id); }, [subject, target, n]);
+  return (
+    <div>
+      <p className="flex items-center gap-2 text-sm font-700"><Icons.target size={16} className="text-brand" /> De ce notă ai nevoie?</p>
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <div><label className="text-[12px] text-muted">Media dorită</label><div className="mt-1"><Stepper value={target} set={setTarget} /></div></div>
+        <div><label className="text-[12px] text-muted">Note rămase</label><div className="mt-1"><Stepper value={n} set={setN} max={5} /></div></div>
+      </div>
+      {res && <motion.div key={`${target}-${n}-${res.reachable}-${res.trivial}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cx('mt-4 rounded-xl p-3.5 text-sm', !res.reachable ? 'bg-heat-heavybg text-heat-heavy' : res.trivial ? 'bg-heat-calmbg text-heat-calm' : 'bg-brand-50 text-brand-700')}>
+        {!res.reachable ? <span>Media <b>{target}</b> nu mai e posibilă cu {n} {n === 1 ? 'notă' : 'note'} — ar trebui peste 10.</span>
+          : res.trivial ? <span>Ești deja acolo 🎉 Chiar și o notă mică îți păstrează media <b>{target}</b>.</span>
+          : <span>Ai nevoie de minim <b className="font-display text-base">{res.need}</b> la {n === 1 ? 'următoarea notă' : `fiecare din următoarele ${n} note`} ca să ajungi la media <b>{target}</b>.</span>}
+      </motion.div>}
+    </div>
+  );
+}
+function AbsencesPanel({ s, reload }) {
+  const a = s.absences;
+  const subjectList = Object.keys(s.subjects).map((c) => ({ code: c, ...s.subjects[c] }));
+  const [addOpen, setAddOpen] = useState(false);
+  return (
+    <div>
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatTile label="Nemotivate" value={a.totUn} tone="#D92626" icon={<Icons.alert size={16} />} sub={`prag ${a.threshold} → scade purtarea`} />
+        <StatTile label="Motivate" value={a.totEx} tone="#16A34A" icon={<Icons.check size={16} />} />
+        <StatTile label="Total" value={a.totUn + a.totEx} tone="#5E6E6B" icon={<Icons.calendar size={16} />} />
+      </div>
+      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)}>Adaugă o absență</ShimmerButton></div>
+      {a.totUn >= 2 && <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm"><Icons.alert size={18} className="shrink-0 text-heat-light" /><span className="text-ink/80">Mai ai <b>{a.threshold - a.totUn} absențe nemotivate</b> până la pragul care îți scade nota la purtare.</span></div>}
+      {a.subjects.length === 0 ? <Empty icon={<Icons.calendar size={26} />} title="Nicio absență" body="Perfect — zero absențe. Pe măsură ce apar, le urmărești aici, motivate și nemotivate." />
+        : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+            {a.subjects.map((sub, i) => (
+              <div key={sub.code} className={cx('flex items-center gap-3 p-4', i && 'border-t border-line')}>
+                <Dot hue={sub.hue} size={12} /><span className="flex-1 font-700">{sub.name}</span>
+                {sub.unexcused > 0 && <span className="rounded-lg bg-heat-heavybg px-2.5 py-1 text-[13px] font-700 text-heat-heavy tnum">{sub.unexcused} nemotivate</span>}
+                {sub.excused > 0 && <span className="rounded-lg bg-heat-calmbg px-2.5 py-1 text-[13px] font-700 text-heat-calm tnum">{sub.excused} motivate</span>}
+              </div>
+            ))}
+          </div>}
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="ab-t"><AddAbsence s={s} subjects={subjectList} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }} /></Sheet>
+    </div>
+  );
+}
+function AddAbsence({ s, subjects, onClose, onSaved }) {
+  const [subject, setSubject] = useState('');
+  const [kind, setKind] = useState('unexcused');
+  const save = () => { if (!subject) return; API.post('/api/absences', { studentId: s.student.id, subject, kind }).then(onSaved); };
+  return (
+    <Modal>
+      <h3 id="ab-t" className="font-display text-xl font-700">Adaugă o absență</h3>
+      <div className="mt-4 space-y-4">
+        <Field label="Materie"><SubjectSelect subjects={subjects} value={subject} onChange={setSubject} /></Field>
+        <div><span className="mb-1 block text-[12px] font-700 text-muted">Tip</span><div className="flex gap-1.5">{[['unexcused', 'Nemotivată'], ['excused', 'Motivată']].map(([k, l]) => <button key={k} onClick={() => setKind(k)} className={cx('flex-1 rounded-lg px-2 py-2 text-[13px] font-700 ring-1', kind === k ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{l}</button>)}</div></div>
+      </div>
+      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Salvează</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+    </Modal>
+  );
+}
+
+/* =====================================================================
+ *  ROOT
+ * ===================================================================== */
+function Root() {
+  const [account, setAccount] = useState(() => { try { return JSON.parse(localStorage.getItem('sp_user') || 'null'); } catch (e) { return null; } });
+  const pick = (a) => { setAccount(a); try { localStorage.setItem('sp_user', JSON.stringify(a)); } catch (e) {} };
+  const logout = () => { setAccount(null); try { localStorage.removeItem('sp_user'); } catch (e) {} };
+  if (!account) return <Login onPick={pick} />;
+  if (account.role === 'admin') return <AdminApp account={account} onLogout={logout} />;
+  if (account.role === 'teacher') return <TeacherApp account={account} onLogout={logout} />;
+  return <StudentApp account={account} onLogout={logout} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
 </script>
 </body>
 </html>
