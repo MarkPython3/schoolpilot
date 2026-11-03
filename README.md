@@ -17,7 +17,13 @@ Full-stack, zero dependencies: a Python backend (SQLite + REST API) and a React 
 ```bash
 python3 server.py            # → http://localhost:8000
 PORT=5000 python3 server.py  # custom port
+python3 seed.py              # demo data: wipes the DB, then adds class 10B (see below)
 ```
+
+`seed.py` builds a demo school: class **10B** with 25 students, 8 teachers, a full
+timetable, an upcoming **Thursday with three tests**, and a student
+(**Matei Constantin**) whose physics average is close to failing. Dates are
+relative to today, so re-run it before a demo.
 
 Open **http://localhost:8000**. The database starts with a **single admin account**
 and nothing else — you build the rest.

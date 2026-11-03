@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 python3 server.py            # http://localhost:8000
 PORT=5000 DB=other.db python3 server.py
+python3 seed.py              # WIPES data, then builds the demo school (class 10B); dates are relative to today
 ```
 
 No dependencies, no build step, no test suite. Verify changes by running the server and using the app in a browser. `POST /api/reset` wipes everything except the admin account; deleting `schoolpilot.db` also resets.
