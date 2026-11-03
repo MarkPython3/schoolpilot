@@ -55,18 +55,19 @@ and nothing else — you build the rest.
 
 ### Admin
 - Add / delete **schools**.
-- Per school: add / delete **classes**, **teachers** (with subjects), **students** (assigned to a class).
+- Per school: add / delete **classes** (and set each class's **diriginte**), **teachers** (with subjects), **students** (assigned to a class).
 - Build the **timetable** per class (place/replace/remove any slot: subject, teacher, room).
 - Starts empty — nothing is seeded except the admin account.
 
 ### Teacher
 - **Orarul meu** — weekly schedule showing only the lessons they teach (class, subject, room, time; today highlighted).
+- **Catalog** — per class + subject they teach: student list with grades, average and absences; add/edit/delete their own grades and absences; **Prezența de azi** roll call for today's lesson; **Motivări** for the diriginte.
 - **Încărcare** — per-class workload heatmap + collision detector; schedule assessments with calmest-day suggestions.
 
 ### Student
-- **Azi** — morning brief: today's lessons, what to pack, what's due (add/tick personal tasks).
+- **Azi** — morning brief: today's lessons, what to pack, what's due (add/tick personal tasks), and new grades from the last 3 days.
 - **Orar** — their class timetable with assessment markers.
-- **Catalog** — grades (with averages + "what do I need?" calculator) and absences; add grades/absences to populate.
+- **Catalog** — read-only grades (date, note and teacher on tap/hover, averages, "what do I need?" calculator) and absences.
 
 ## Architecture
 
@@ -90,7 +91,10 @@ schoolpilot/
 | POST/DELETE | `/api/assessments` | teacher |
 | GET | `/api/student?userId=` | student |
 | POST | `/api/tasks` · PATCH/DELETE `/api/tasks/:id` | student |
-| POST | `/api/grades` · `/api/grades/what-if` · `/api/absences` | student |
+| POST | `/api/grades/what-if` | student |
+| GET | `/api/teacher/catalog?classId=&subject=` · `/api/teacher/motivari` | teacher |
+| POST · PATCH/DELETE `/:id` | `/api/grades`, `/api/absences` | teacher (own entries; diriginte can excuse) |
+| PATCH | `/api/classes/:id` (diriginte) | admin |
 | POST | `/api/reset` | wipe to admin-only |
 
 ## Design
@@ -103,7 +107,6 @@ schoolpilot/
 
 ### Not in this build
 No self-service password reset by email (the admin resets passwords), and no
-messaging/announcements. Grades & absences have no teacher-entry flow yet (students
-can add them to test the calculator).
+messaging/announcements.
 
 > Working name / placeholder branding. UI is in Romanian for the target school context.

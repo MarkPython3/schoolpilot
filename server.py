@@ -105,7 +105,8 @@ CREATE TABLE IF NOT EXISTS schools (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS classes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, name TEXT NOT NULL
+  id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, name TEXT NOT NULL,
+  homeroom_teacher_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, name TEXT NOT NULL,
@@ -124,11 +125,13 @@ CREATE TABLE IF NOT EXISTS assessments (
 );
 CREATE TABLE IF NOT EXISTS grades (
   id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL,
-  subject TEXT NOT NULL, value INTEGER NOT NULL, date TEXT NOT NULL
+  subject TEXT NOT NULL, value INTEGER NOT NULL, date TEXT NOT NULL,
+  teacher_id INTEGER, note TEXT
 );
 CREATE TABLE IF NOT EXISTS absences (
   id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL,
-  subject TEXT NOT NULL, kind TEXT NOT NULL, date TEXT NOT NULL
+  subject TEXT NOT NULL, kind TEXT NOT NULL, date TEXT NOT NULL,
+  teacher_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL,
@@ -137,13 +140,52 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 """
 
+ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ADDED_COLUMNS = [  # columns newer than the first databases
+    ("users", "email", "TEXT"), ("users", "auth_id", "TEXT"),
+    ("classes", "homeroom_teacher_id", "INTEGER"),
+    ("grades", "teacher_id", "INTEGER"), ("grades", "note", "TEXT"),
+    ("absences", "teacher_id", "INTEGER"),
+]
+
+def old_grade_date_to_iso(text, ref):
+    """'3 nov' (the old stored format) → ISO. The year wasn't stored, so take the
+    latest such date that isn't in the future. None if it can't be parsed."""
+    m = re.match(r"^(\d{1,2}) (\w+)$", (text or "").strip())
+    if not m or m.group(2) not in MONTHS[1:]:
+        return None
+    month = MONTHS.index(m.group(2))
+    try:
+        d = date(ref.year, month, int(m.group(1)))
+        return iso(d if d <= ref else date(ref.year - 1, month, int(m.group(1))))
+    except ValueError:
+        return None
+
+def migrate(con):
+    """Bring an older database up to date; safe to run on every start."""
+    missing = [(t, c, kind) for t, c, kind in ADDED_COLUMNS
+               if c not in [r["name"] for r in con.execute("PRAGMA table_info(%s)" % t).fetchall()]]
+    old_dates = [r for r in con.execute("SELECT id, date FROM grades").fetchall() if not ISO_RE.match(r["date"])]
+    if not missing and not old_dates:
+        return
+    backup_path = DB_PATH + ".pre-migration.db"  # first migration only; *.db is git-ignored
+    if not os.path.exists(backup_path):
+        backup = sqlite3.connect(backup_path)
+        con.backup(backup)
+        backup.close()
+    for t, c, kind in missing:
+        con.execute("ALTER TABLE %s ADD COLUMN %s %s" % (t, c, kind))
+    for r in old_dates:
+        new = old_grade_date_to_iso(r["date"], today())
+        if new:
+            con.execute("UPDATE grades SET date=? WHERE id=?", (new, r["id"]))
+        else:
+            print("Grade %d keeps its unreadable date: %r" % (r["id"], r["date"]))
+
 def init_db():
     con = connect()
     con.executescript(SCHEMA)
-    cols = [r["name"] for r in con.execute("PRAGMA table_info(users)").fetchall()]
-    for col in ("email", "auth_id"):  # databases created before login existed
-        if col not in cols:
-            con.execute("ALTER TABLE users ADD COLUMN %s TEXT" % col)
+    migrate(con)
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email)")
     if not con.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
         con.execute("INSERT INTO users(role,name) VALUES('admin','Administrator')")
@@ -288,8 +330,9 @@ def remove_users(con, rows):
         uid = r["id"]
         for t in ("grades", "absences", "tasks"):
             con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
-        con.execute("UPDATE timetable SET teacher_id=NULL WHERE teacher_id=?", (uid,))
-        con.execute("UPDATE assessments SET teacher_id=NULL WHERE teacher_id=?", (uid,))
+        for t in ("timetable", "assessments", "grades", "absences"):
+            con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
+        con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
         con.execute("DELETE FROM users WHERE id=?", (uid,))
 
 def teacher_class_ids(con, uid):
@@ -307,6 +350,52 @@ def need_class(con, me, cid):
     if me["role"] == "student" and me["class_id"] == cid:
         return
     raise HttpError(403, "Nu ai acces la această clasă.")
+
+def teacher_subjects(con, teacher_id, class_id):
+    """Subjects this teacher teaches in this class, according to the timetable."""
+    return [r["subject"] for r in con.execute(
+        "SELECT DISTINCT subject FROM timetable WHERE teacher_id=? AND class_id=? ORDER BY subject",
+        (teacher_id, class_id)).fetchall()]
+
+def need_subject(con, me, class_id, subject):
+    need(me, "teacher")
+    if subject not in teacher_subjects(con, me["id"], class_id):
+        raise HttpError(403, "Nu predai această materie la această clasă.")
+
+def need_student_subject(con, me, student_id, subject):
+    """The teacher may grade/mark this student only for a subject they teach in the student's class."""
+    need(me, "teacher")
+    s = user_row(con, int(student_id))
+    if not s or s["role"] != "student" or not s["class_id"]:
+        raise HttpError(404, "Elevul nu există.")
+    need_subject(con, me, s["class_id"], subject)
+
+def entry_date(value):
+    try:
+        d = parse_iso(value) if value else today()
+    except (TypeError, ValueError):
+        raise HttpError(400, "Data nu este validă.")
+    if d > today():
+        raise HttpError(400, "Data nu poate fi în viitor.")
+    return iso(d)
+
+def grade_value(value):
+    if str(value).strip() not in [str(v) for v in range(1, 11)]:
+        raise HttpError(400, "Nota trebuie să fie un număr întreg de la 1 la 10.")
+    return int(value)
+
+def clean_note(value):
+    return (str(value).strip()[:80] or None) if value else None
+
+def owned_row(con, table, row_id, me):
+    """A grade or absence, only if this teacher entered it."""
+    need(me, "teacher")
+    r = con.execute("SELECT * FROM %s WHERE id=?" % table, (row_id,)).fetchone()
+    if not r:
+        raise HttpError(404, "Înregistrarea nu există.")
+    if r["teacher_id"] != me["id"]:
+        raise HttpError(403, "Poți modifica doar ce ai introdus tu.")
+    return r
 
 # --------------------------------------------------------------------------- #
 #  Serializers / derived
@@ -363,7 +452,7 @@ def build_admin(con):
     schools = []
     for s in con.execute("SELECT * FROM schools ORDER BY id").fetchall():
         sid = s["id"]
-        classes = [{"id": c["id"], "name": c["name"],
+        classes = [{"id": c["id"], "name": c["name"], "homeroomTeacherId": c["homeroom_teacher_id"],
                     "students": con.execute("SELECT COUNT(*) n FROM users WHERE role='student' AND class_id=?", (c["id"],)).fetchone()["n"],
                     "slots": con.execute("SELECT COUNT(*) n FROM timetable WHERE class_id=?", (c["id"],)).fetchone()["n"]}
                    for c in con.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()]
@@ -451,15 +540,51 @@ def build_teacher(con, uid):
             })
     for d in schedule:
         d.sort(key=lambda x: x["period"])
-    classes = [{"id": cid, "name": class_name(con, cid)} for cid in class_ids]
+    classes = [{"id": cid, "name": class_name(con, cid), "subjects": teacher_subjects(con, uid, cid)} for cid in class_ids]
+    homerooms = [{"id": c["id"], "name": c["name"]}
+                 for c in con.execute("SELECT * FROM classes WHERE homeroom_teacher_id=? ORDER BY name", (uid,)).fetchall()]
     wd = today().weekday()
     return {
         "teacher": {"id": uid, "name": u["name"], "school": school_name(con, u["school_id"]),
                     "subjects": json.loads(u["subjects"] or "[]")},
-        "classes": classes, "schedule": schedule, "periods": PERIODS,
+        "classes": classes, "homerooms": homerooms, "schedule": schedule, "periods": PERIODS,
         "todayIdx": wd if wd <= 4 else None,
         "subjectCatalog": subjects_catalog(),
     }
+
+# ---- teacher catalog: one class + subject ----
+def build_catalog(con, me, class_id, subject):
+    uid = me["id"]
+    wd = today().weekday()
+    lessons = con.execute("SELECT period FROM timetable WHERE class_id=? AND subject=? AND teacher_id=? AND day=? ORDER BY period",
+                          (class_id, subject, uid, wd)).fetchall() if wd <= 4 else []
+    cls = con.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
+    students = []
+    for s in con.execute("SELECT * FROM users WHERE role='student' AND class_id=? ORDER BY name", (class_id,)).fetchall():
+        grades = con.execute("SELECT * FROM grades WHERE student_id=? AND subject=? ORDER BY date, id", (s["id"], subject)).fetchall()
+        absences = con.execute("SELECT * FROM absences WHERE student_id=? AND subject=? ORDER BY date DESC, id DESC", (s["id"], subject)).fetchall()
+        students.append({
+            "id": s["id"], "name": s["name"],
+            "avg": round(sum(g["value"] for g in grades) / len(grades), 2) if grades else None,
+            "grades": [{"id": g["id"], "v": g["value"], "d": g["date"], "note": g["note"],
+                        "teacher": teacher_name(con, g["teacher_id"]), "mine": g["teacher_id"] == uid} for g in grades],
+            "absences": [{"id": a["id"], "d": a["date"], "excused": a["kind"] == "excused",
+                          "teacher": teacher_name(con, a["teacher_id"]), "mine": a["teacher_id"] == uid} for a in absences],
+        })
+    return {"classId": class_id, "className": cls["name"], "subject": subject, "subjectName": subj_name(subject),
+            "today": iso(today()), "lessonToday": PERIODS[lessons[0]["period"]] if lessons else None,
+            "isHomeroom": cls["homeroom_teacher_id"] == uid, "students": students}
+
+def build_motivari(con, uid):
+    out = []
+    for c in con.execute("SELECT * FROM classes WHERE homeroom_teacher_id=? ORDER BY name", (uid,)).fetchall():
+        rows = con.execute("""SELECT a.*, u.name AS student FROM absences a JOIN users u ON u.id=a.student_id
+                              WHERE u.class_id=? AND a.kind='unexcused' ORDER BY a.date DESC, u.name""", (c["id"],)).fetchall()
+        out.append({"classId": c["id"], "className": c["name"],
+                    "absences": [{"id": r["id"], "student": r["student"], "subjectName": subj_name(r["subject"]),
+                                  "short": subj_short(r["subject"]), "d": r["date"],
+                                  "teacher": teacher_name(con, r["teacher_id"])} for r in rows]})
+    return {"classes": out}
 
 # ---- student snapshot ----
 def build_student(con, uid):
@@ -534,6 +659,11 @@ def build_student(con, uid):
     # grades
     grades = build_grades(con, uid)
     absences = build_absences(con, uid)
+    cutoff = iso(t - timedelta(days=3))
+    new_grades = sorted(({**v, "subject": sub["code"], "short": sub["short"], "hue": sub["hue"]}
+                         for sub in grades["subjects"] for v in sub["values"]
+                         if ISO_RE.match(v["d"]) and v["d"] >= cutoff),
+                        key=lambda g: (g["d"], g["id"]), reverse=True)
     label = "%s, %d %s" % (FULLDAYS[wd], t.day, MONTHS[t.month])
     return {
         "student": {"id": uid, "name": u["name"], "class": cls, "classId": cid,
@@ -541,7 +671,7 @@ def build_student(con, uid):
         "subjects": {c: {"name": n, "hue": hue, "short": s} for c, (n, hue, s) in SUBJECTS.items()},
         "typeLabel": TYPE_LABEL,
         "today": {"weekdayIdx": idx, "isWeekend": is_weekend, "dateLabel": label,
-                  "classes": classes_today, "pack": pack, "due": due + due_tasks},
+                  "classes": classes_today, "pack": pack, "due": due + due_tasks, "newGrades": new_grades},
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
         "tasks": tasks,
         "grades": grades, "absences": absences,
@@ -549,7 +679,7 @@ def build_student(con, uid):
     }
 
 def build_grades(con, student_id):
-    rows = con.execute("SELECT * FROM grades WHERE student_id=? ORDER BY id", (student_id,)).fetchall()
+    rows = con.execute("SELECT * FROM grades WHERE student_id=? ORDER BY date, id", (student_id,)).fetchall()
     bysub = {}
     for r in rows:
         bysub.setdefault(r["subject"], []).append(r)
@@ -558,7 +688,9 @@ def build_grades(con, student_id):
         vals = [r["value"] for r in lst]
         avg = round(sum(vals) / len(vals), 2)
         subs.append({"code": code, "name": subj_name(code), "hue": subj_hue(code), "short": subj_short(code),
-                     "avg": avg, "risk": avg < 6, "values": [{"v": r["value"], "d": r["date"]} for r in lst]})
+                     "avg": avg, "risk": avg < 6,
+                     "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"],
+                                 "teacher": teacher_name(con, r["teacher_id"])} for r in lst]})
     subs.sort(key=lambda s: s["name"])
     overall = round(sum(s["avg"] for s in subs) / len(subs), 2) if subs else 0
     best = max(subs, key=lambda s: s["avg"]) if subs else None
@@ -715,6 +847,13 @@ class Handler(BaseHTTPRequestHandler):
             cid = int(q["classId"][0])
             need_class(con, me, cid)
             return class_workload(con, cid)
+        if p == "/api/teacher/catalog":
+            cid, subject = int(q["classId"][0]), q["subject"][0]
+            need_subject(con, me, cid, subject)
+            return build_catalog(con, me, cid, subject)
+        if p == "/api/teacher/motivari":
+            need(me, "teacher")
+            return build_motivari(con, me["id"])
         if p == "/api/student":
             need(me, "student")
             return build_student(con, me["id"])
@@ -773,6 +912,18 @@ class Handler(BaseHTTPRequestHandler):
             con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
             con.execute("UPDATE users SET class_id=NULL WHERE class_id=?", (cid,))
             con.execute("DELETE FROM classes WHERE id=?", (cid,))
+            return {"ok": True}
+        if m and method == "PATCH":  # set or clear the diriginte
+            cid, tid = int(m.group(1)), body.get("homeroomTeacherId")
+            cls = con.execute("SELECT * FROM classes WHERE id=?", (cid,)).fetchone()
+            if not cls:
+                raise HttpError(404, "Clasa nu există.")
+            if tid is not None:
+                tid = int(tid)
+                t = user_row(con, tid)
+                if not t or t["role"] != "teacher" or t["school_id"] != cls["school_id"]:
+                    raise HttpError(400, "Dirigintele trebuie să fie profesor la această școală.")
+            con.execute("UPDATE classes SET homeroom_teacher_id=? WHERE id=?", (tid, cid))
             return {"ok": True}
 
         # ---------- admin: teachers ----------
@@ -833,8 +984,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise HttpError(404, "not found")
             return {"ok": True}
 
-        # ---------- student: own tasks, grades, absences ----------
-        if re.match(r"^/api/(tasks|grades|absences)(/|$)", p):
+        # ---------- student: own tasks + calculator (grades and absences are read-only) ----------
+        if p.startswith("/api/tasks") or p == "/api/grades/what-if":
             need(me, "student")
         if p == "/api/tasks" and method == "POST":
             con.execute("INSERT INTO tasks(student_id,title,subject,type,due,done,created_at) VALUES(?,?,?,?,?,0,?)",
@@ -852,21 +1003,65 @@ class Handler(BaseHTTPRequestHandler):
                 raise HttpError(404, "not found")
             return {"ok": True}
 
-        if p == "/api/grades" and method == "POST":
-            v = int(body["value"])
-            if not (1 <= v <= 10):
-                raise ValueError("grade 1..10")
-            con.execute("INSERT INTO grades(student_id,subject,value,date) VALUES(?,?,?,?)",
-                        (me["id"], body["subject"], v,
-                         "%d %s" % (today().day, MONTHS[today().month])))
-            return {"ok": True}
         if p == "/api/grades/what-if" and method == "POST":
             rows = con.execute("SELECT value FROM grades WHERE student_id=? AND subject=?",
                                (me["id"], body["subject"])).fetchall()
             return what_if([r["value"] for r in rows], float(body.get("target", 8)), int(body.get("n", 1)))
-        if p == "/api/absences" and method == "POST":
-            con.execute("INSERT INTO absences(student_id,subject,kind,date) VALUES(?,?,?,?)",
-                        (me["id"], body["subject"], body.get("kind", "unexcused"), iso(today())))
+
+        # ---------- teacher: grades ----------
+        if p == "/api/grades" and method == "POST":
+            need_student_subject(con, me, body["studentId"], body["subject"])
+            con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
+                        (int(body["studentId"]), body["subject"], grade_value(body["value"]),
+                         entry_date(body.get("date")), me["id"], clean_note(body.get("note"))))
+            return {"ok": True}
+        m = re.match(r"^/api/grades/(\d+)$", p)
+        if m and method == "PATCH":
+            r = owned_row(con, "grades", int(m.group(1)), me)
+            con.execute("UPDATE grades SET value=?, date=?, note=? WHERE id=?",
+                        (grade_value(body.get("value", r["value"])), entry_date(body.get("date", r["date"])),
+                         clean_note(body.get("note", r["note"])), r["id"]))
+            return {"ok": True}
+        if m and method == "DELETE":
+            con.execute("DELETE FROM grades WHERE id=?", (owned_row(con, "grades", int(m.group(1)), me)["id"],))
+            return {"ok": True}
+
+        # ---------- teacher: absences ----------
+        if p == "/api/absences" and method == "POST":  # studentId, or studentIds for the whole roll call
+            ids = [int(i) for i in body.get("studentIds") or [body["studentId"]]]
+            when = entry_date(body.get("date"))
+            added = 0
+            for sid in ids:
+                need_student_subject(con, me, sid, body["subject"])
+                if not con.execute("SELECT 1 FROM absences WHERE student_id=? AND subject=? AND date=?",
+                                   (sid, body["subject"], when)).fetchone():
+                    con.execute("INSERT INTO absences(student_id,subject,kind,date,teacher_id) VALUES(?,?,'unexcused',?,?)",
+                                (sid, body["subject"], when, me["id"]))
+                    added += 1
+            return {"added": added, "alreadyMarked": len(ids) - added}
+        m = re.match(r"^/api/absences/(\d+)$", p)
+        if m and method == "PATCH":
+            need(me, "teacher")
+            r = con.execute("SELECT * FROM absences WHERE id=?", (int(m.group(1)),)).fetchone()
+            if not r:
+                raise HttpError(404, "Înregistrarea nu există.")
+            if "excused" in body:  # the diriginte, or whoever recorded it
+                cls = con.execute("""SELECT c.homeroom_teacher_id h FROM classes c JOIN users u ON u.class_id=c.id
+                                     WHERE u.id=?""", (r["student_id"],)).fetchone()
+                if r["teacher_id"] != me["id"] and not (cls and cls["h"] == me["id"]):
+                    raise HttpError(403, "Doar dirigintele sau profesorul care a notat absența o poate motiva.")
+                con.execute("UPDATE absences SET kind=? WHERE id=?",
+                            ("excused" if body["excused"] else "unexcused", r["id"]))
+            if "date" in body:
+                owned_row(con, "absences", r["id"], me)
+                when = entry_date(body["date"])
+                if con.execute("SELECT 1 FROM absences WHERE student_id=? AND subject=? AND date=? AND id!=?",
+                               (r["student_id"], r["subject"], when, r["id"])).fetchone():
+                    raise HttpError(400, "Elevul are deja o absență la această dată.")
+                con.execute("UPDATE absences SET date=? WHERE id=?", (when, r["id"]))
+            return {"ok": True}
+        if m and method == "DELETE":
+            con.execute("DELETE FROM absences WHERE id=?", (owned_row(con, "absences", int(m.group(1)), me)["id"],))
             return {"ok": True}
 
         # ---------- danger: wipe everything ----------

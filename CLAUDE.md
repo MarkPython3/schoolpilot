@@ -21,7 +21,9 @@ Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called
 - Only the admin creates accounts (public sign-up is off in Supabase): `add_account` / `reset_auth_password` / `remove_users` call the Auth Admin API (`/auth/v1/admin/users`, `apikey: <secret>`) and return a one-time temporary password.
 - Frontend: `Root` boots supabase-js (vendored), shows `Login` → `ChangePassword` (when `mustChangePassword`) → `AdminApp` / `TeacherApp` / `StudentApp`, each wrapped in `Shell`. `jfetch` adds the bearer token and logs out on 401.
 - Subjects are a fixed catalogue (`SUBJECTS` in `server.py`, keyed by code such as `mate` or `fiz`). Assessment types `test`/`quiz`/`tema` have weights in `TYPE_W`; only `test` and `quiz` count as graded for collisions.
-- Dates: assessments and absences are stored as ISO `YYYY-MM-DD`; grade dates are stored as display strings such as `"3 nov"`.
+- Grades and absences are entered only by teachers; students read them. `need_student_subject` checks the timetable (a teacher may act only on subjects they teach in that student's class), `owned_row` limits edit/delete to the teacher who entered the row, and an absence can be excused by its recorder or the class's diriginte (`classes.homeroom_teacher_id`, set by the admin).
+- Dates are stored as ISO `YYYY-MM-DD`; the frontend formats them with `fmtDate`.
+- Schema changes for existing databases go in `ADDED_COLUMNS` / `migrate()`, which run on every start and back up the DB to `<db>.pre-migration.db` the first time.
 
 ## Conventions
 

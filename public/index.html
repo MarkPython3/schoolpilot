@@ -102,6 +102,11 @@ const API = {
 };
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
+const MONTHS_RO = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const fmtDate = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(s || ''); return m ? `${Number(m[2])} ${MONTHS_RO[Number(m[1]) - 1]}` : (s || ''); };
+const gradeStyle = (v) => ({ background: v >= 9 ? '#DEF7E6' : v >= 7 ? '#E7FBF7' : v >= 5 ? '#FBF1CF' : '#FBDFDF', color: v >= 9 ? '#0F7C39' : v >= 7 ? '#0B7A72' : v >= 5 ? '#946500' : '#AE1919' });
+const absentaLabel = (n) => (n === 1 ? '1 absență' : `${n} absențe`);
+
 /* ---------------- Icons ---------------- */
 const Ic = ({ size = 20, fill = false, sw = 1.75, children, ...p }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
@@ -132,6 +137,7 @@ const Icons = {
   trash: (p) => <Ic {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Ic>,
   logout: (p) => <Ic {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Ic>,
   spark: (p) => <Ic {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></Ic>,
+  pencil: (p) => <Ic {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></Ic>,
   key: (p) => <Ic {...p}><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" /></Ic>,
   copy: (p) => <Ic {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></Ic>,
 };
@@ -180,7 +186,7 @@ function Sheet({ open, onClose, children, labelledBy }) {
 }
 function Modal({ children, wide }) {
   return <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring}
-    className={cx('relative z-10 w-full rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2', wide ? 'max-w-lg' : 'max-w-md')}>
+    className={cx('relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2', wide ? 'max-w-lg' : 'max-w-md')}>
     <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />{children}</motion.div>;
 }
 function Stepper({ value, set, min = 1, max = 10 }) {
@@ -560,6 +566,7 @@ function AdminClasses({ school, reload }) {
   const [name, setName] = useState('');
   const add = () => { if (!name.trim()) return; API.post('/api/classes', { schoolId: school.id, name }).then(() => { setName(''); reload(); }); };
   const del = (c) => { if (confirm(`Ștergi clasa ${c.name}?`)) API.del(`/api/classes/${c.id}`).then(reload); };
+  const setHomeroom = (c, id) => API.patch(`/api/classes/${c.id}`, { homeroomTeacherId: id ? Number(id) : null }).then(reload).catch((e) => alert(errText(e)));
   return (
     <div>
       <div className="mb-4 flex items-end gap-2">
@@ -567,11 +574,17 @@ function AdminClasses({ school, reload }) {
         <ShimmerButton icon={<Icons.plus size={18} />} onClick={add}>Adaugă</ShimmerButton>
       </div>
       {school.classes.length === 0 ? <Empty icon={<Icons.users size={26} />} title="Nicio clasă" body="Adaugă o clasă (ex. 9A, 10B). Elevii și orarul se leagă de o clasă." />
-        : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {school.classes.map((c) => (
-              <div key={c.id} className="group flex items-center justify-between rounded-xl2 border border-line bg-white p-4 shadow-card">
-                <div><p className="font-display text-xl font-700">{c.name}</p><p className="text-[12px] text-muted">{c.students} elevi · {c.slots} ore</p></div>
-                <button onClick={() => del(c)} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100"><Icons.trash size={16} /></button>
+              <div key={c.id} className="group rounded-xl2 border border-line bg-white p-4 shadow-card">
+                <div className="flex items-center justify-between">
+                  <div><p className="font-display text-xl font-700">{c.name}</p><p className="text-[12px] text-muted">{c.students} elevi · {c.slots} ore</p></div>
+                  <button onClick={() => del(c)} aria-label={`Șterge clasa ${c.name}`} className="grid h-8 w-8 place-items-center rounded-lg text-muted opacity-0 hover:bg-heat-heavybg hover:text-heat-heavy group-hover:opacity-100 focus:opacity-100"><Icons.trash size={16} /></button>
+                </div>
+                <div className="mt-3"><Field label="Diriginte"><select value={c.homeroomTeacherId || ''} onChange={(e) => setHomeroom(c, e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand">
+                  <option value="">— fără diriginte —</option>
+                  {school.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select></Field></div>
               </div>
             ))}
           </div>}
@@ -773,12 +786,14 @@ function TeacherApp({ account, onLogout }) {
   const [err, setErr] = useState(null);
   const load = useCallback(() => API.get('/api/teacher').then((d) => { setErr(null); setT(d); }).catch((e) => setErr(errText(e))), [account.id]);
   useEffect(() => { load(); }, [load]);
-  const nav = [{ id: 'schedule', label: 'Orarul meu', icon: Icons.grid }, { id: 'workload', label: 'Încărcare', icon: Icons.pulse }];
+  const nav = [{ id: 'schedule', label: 'Orarul meu', icon: Icons.grid }, { id: 'catalog', label: 'Catalog', icon: Icons.chart }, { id: 'workload', label: 'Încărcare', icon: Icons.pulse }];
   return (
     <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
         {!t ? (err ? <LoadFailed err={err} retry={load} /> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>)
-          : view === 'schedule' ? <TeacherSchedule t={t} /> : <TeacherWorkload t={t} />}
+          : view === 'schedule' ? <TeacherSchedule t={t} />
+          : view === 'catalog' ? <TeacherCatalog t={t} />
+          : <TeacherWorkload t={t} />}
       </div>
     </Shell>
   );
@@ -809,6 +824,212 @@ function TeacherSchedule({ t }) {
     </div>
   );
 }
+/* ---------------- teacher catalog ---------------- */
+function PickChips({ label, options, value, onChange }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-[12px] font-700 text-muted">{label}:</span>
+      {options.map((o) => <button key={o.id} onClick={() => onChange(o.id)} className={cx('rounded-lg px-3 py-2 text-[13px] font-700 ring-1', value === o.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{o.label}</button>)}
+    </div>
+  );
+}
+function TeacherCatalog({ t }) {
+  // Start on today's first lesson, when there is one.
+  const lesson = t.todayIdx != null ? t.schedule[t.todayIdx][0] : null;
+  const firstClass = lesson ? t.classes.find((c) => c.id === lesson.classId) : t.classes[0];
+  const [classId, setClassId] = useState(firstClass ? firstClass.id : null);
+  const cls = t.classes.find((c) => c.id === classId);
+  const [subject, setSubject] = useState(lesson ? lesson.subject : (firstClass ? firstClass.subjects[0] : null));
+  const [mode, setMode] = useState('list');
+  const [cat, setCat] = useState(null);
+  const [err, setErr] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [motivariTick, setMotivariTick] = useState(0);
+  const load = useCallback(() => {
+    if (!classId || !subject) return Promise.resolve();
+    return API.get(`/api/teacher/catalog?classId=${classId}&subject=${encodeURIComponent(subject)}`).then((d) => { setErr(null); setCat(d); }).catch((e) => setErr(errText(e)));
+  }, [classId, subject]);
+  useEffect(() => { load(); }, [load]);
+  const reloadAll = () => { setMotivariTick((n) => n + 1); return load(); };
+  const pickClass = (id) => { setCat(null); setClassId(id); setSubject(t.classes.find((c) => c.id === id).subjects[0]); };
+  const pickSubject = (code) => { setCat(null); setSubject(code); };
+  const current = cat && cat.classId === classId && cat.subject === subject ? cat : null;
+  const students = current ? [...current.students].sort((a, b) => a.name.localeCompare(b.name, 'ro')) : [];
+  const open = students.find((s) => s.id === openId);
+  const subjectName = (code) => (t.subjectCatalog.find((s) => s.code === code) || {}).name || code;
+  return (
+    <div>
+      <ViewHead title="Catalog" sub="Note și absențe la clasele tale" icon={<Icons.chart />} />
+      {t.classes.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Nicio clasă" body="Vei putea pune note după ce administratorul te adaugă în orar." />
+        : <>
+            <PickChips label="Clasa" options={t.classes.map((c) => ({ id: c.id, label: c.name }))} value={classId} onChange={pickClass} />
+            {cls && <PickChips label="Materia" options={cls.subjects.map((code) => ({ id: code, label: subjectName(code) }))} value={subject} onChange={pickSubject} />}
+            <div className="mb-4 overflow-x-auto no-scrollbar"><FluidTabs id="tcat" active={mode} onChange={setMode} tabs={[{ id: 'list', label: 'Elevi', icon: <Icons.users size={15} /> }, { id: 'roll', label: 'Prezența de azi', icon: <Icons.check size={15} /> }]} /></div>
+            {err && <div className="mb-4"><LoadFailed err={err} retry={load} /></div>}
+            {!current && !err && <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+            {current && students.length === 0 && <Empty icon={<Icons.users size={26} />} title="Niciun elev" body="Clasa nu are încă elevi." />}
+            {current && students.length > 0 && (mode === 'list'
+              ? <CatalogList students={students} onOpen={setOpenId} />
+              : <RollCall key={`${classId}-${subject}`} cat={current} students={students} reload={reloadAll} />)}
+          </>}
+      {t.homerooms.length > 0 && <Motivari tick={motivariTick} onChanged={reloadAll} />}
+      <Sheet open={!!open} onClose={() => setOpenId(null)} labelledBy="se-t">
+        {open && <StudentEntries key={open.id} student={open} cat={current} reload={reloadAll} onClose={() => setOpenId(null)} />}
+      </Sheet>
+    </div>
+  );
+}
+function CatalogList({ students, onOpen }) {
+  return (
+    <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+      {students.map((s, i) => (
+        <button key={s.id} onClick={() => onOpen(s.id)} className={cx('block w-full p-4 text-left hover:bg-paper/60', i && 'border-t border-line')}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate font-700">{s.name}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              {s.absences.length > 0 && <span className="rounded-lg bg-heat-heavybg px-2 py-0.5 text-[12px] font-700 text-heat-heavy tnum">{absentaLabel(s.absences.length)}</span>}
+              <span className="w-12 text-right font-display text-lg font-700 tnum" style={{ color: s.avg !== null && s.avg < 6 ? '#D92626' : '#12201E' }}>{s.avg === null ? '—' : s.avg.toFixed(2)}</span>
+            </span>
+          </div>
+          {s.grades.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{s.grades.map((g) => <span key={g.id} className="grid h-7 w-7 place-items-center rounded-lg text-[13px] font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>)}</div>}
+        </button>
+      ))}
+    </div>
+  );
+}
+function RollCall({ cat, students, reload }) {
+  const [absent, setAbsent] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [saved, setSaved] = useState(null);
+  if (!cat.lessonToday) return <Empty icon={<Icons.calendar size={26} />} title="Nicio oră azi" body={`Azi nu ai ${cat.subjectName} la ${cat.className}. Alege altă materie sau adaugă absența din lista de elevi.`} />;
+  const marked = (s) => s.absences.some((a) => a.d === cat.today);
+  const toggle = (id) => { setSaved(null); setAbsent((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id])); };
+  const save = () => {
+    setBusy(true); setErr(null);
+    API.post('/api/absences', { studentIds: absent, subject: cat.subject, date: cat.today })
+      .then((r) => reload().then(() => { setAbsent([]); setSaved(r.added); }))
+      .catch((e) => setErr(errText(e)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div>
+      <p className="mb-3 text-[13px] text-muted">{cat.subjectName} · {cat.className} · ora {cat.lessonToday}. Atinge numele elevilor absenți, apoi salvează.</p>
+      {err && <div className="mb-3"><FormError>{err}</FormError></div>}
+      {saved !== null && <p role="status" className="mb-3 rounded-xl bg-heat-calmbg p-3 text-[13px] font-600 text-heat-calm">Am salvat {absentaLabel(saved)}.</p>}
+      <ul className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+        {students.map((s, i) => {
+          const done = marked(s), on = absent.includes(s.id);
+          return (
+            <li key={s.id} className={cx(i && 'border-t border-line')}>
+              <button disabled={done} aria-pressed={on || done} onClick={() => toggle(s.id)} className={cx('flex w-full items-center gap-3 p-4 text-left transition-colors', on ? 'bg-heat-heavybg' : !done && 'hover:bg-paper/60')}>
+                <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2', on || done ? 'border-heat-heavy bg-heat-heavy text-white' : 'border-line')}>{(on || done) && <Icons.x size={14} sw={3} />}</span>
+                <span className={cx('min-w-0 flex-1 truncate font-700', done && 'text-muted')}>{s.name}</span>
+                {done ? <span className="shrink-0 text-[12px] font-600 text-muted">absent, salvat</span> : on && <span className="shrink-0 text-[12px] font-700 text-heat-heavy">absent</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="sticky bottom-20 z-20 mt-4 lg:bottom-4">
+        <ShimmerButton className="w-full" onClick={save} disabled={busy || absent.length === 0}>{busy ? 'Se salvează…' : absent.length ? `Salvează (${absentaLabel(absent.length)})` : 'Salvează'}</ShimmerButton>
+      </div>
+    </div>
+  );
+}
+function StudentEntries({ student, cat, reload, onClose }) {
+  const [tab, setTab] = useState('grade');
+  const [editing, setEditing] = useState(null); // id of the entry being edited
+  const [value, setValue] = useState(8);
+  const [date, setDate] = useState(cat.today);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const clear = () => { setEditing(null); setValue(8); setDate(cat.today); setNote(''); setErr(null); };
+  const run = (promise) => {
+    setBusy(true); setErr(null);
+    return promise.then(() => { clear(); return reload(); }).catch((e) => setErr(errText(e))).finally(() => setBusy(false));
+  };
+  const switchTab = (id) => { clear(); setTab(id); };
+  const saveGrade = () => run(editing
+    ? API.patch(`/api/grades/${editing}`, { value, date, note })
+    : API.post('/api/grades', { studentId: student.id, subject: cat.subject, value, date, note }));
+  const saveAbsence = () => run(editing
+    ? API.patch(`/api/absences/${editing}`, { date })
+    : API.post('/api/absences', { studentId: student.id, subject: cat.subject, date }));
+  const editGrade = (g) => { setTab('grade'); setEditing(g.id); setValue(g.v); setDate(g.d); setNote(g.note || ''); setErr(null); };
+  const editAbsence = (a) => { setTab('absence'); setEditing(a.id); setDate(a.d); setErr(null); };
+  const delGrade = (g) => { if (confirm(`Ștergi nota ${g.v} din ${fmtDate(g.d)}?`)) run(API.del(`/api/grades/${g.id}`)); };
+  const delAbsence = (a) => { if (confirm(`Ștergi absența din ${fmtDate(a.d)}?`)) run(API.del(`/api/absences/${a.id}`)); };
+  const iconBtn = 'grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-paper hover:text-ink';
+  return (
+    <Modal>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0"><h3 id="se-t" className="truncate font-display text-xl font-700">{student.name}</h3><p className="text-sm text-muted">{cat.subjectName} · {cat.className}{student.avg !== null && ` · media ${student.avg.toFixed(2)}`}</p></div>
+        <button onClick={onClose} aria-label="Închide" className={iconBtn}><Icons.x size={18} /></button>
+      </div>
+      <div className="mt-4"><FluidTabs id="entry" active={tab} onChange={switchTab} tabs={[{ id: 'grade', label: 'Notă', icon: <Icons.chart size={15} /> }, { id: 'absence', label: 'Absență', icon: <Icons.calendar size={15} /> }]} /></div>
+      <div className="mt-4 space-y-4">
+        <FormError>{err}</FormError>
+        {tab === 'grade' && <div><span className="mb-1 block text-[12px] font-700 text-muted">Nota</span><Stepper value={value} set={setValue} /></div>}
+        <Field label="Data"><Input type="date" value={date} max={cat.today} onChange={(e) => setDate(e.target.value)} /></Field>
+        {tab === 'grade' && <div>
+          <Field label="Observație (opțional)"><Input value={note} maxLength={80} onChange={(e) => setNote(e.target.value)} placeholder="ex. lucrare" /></Field>
+          <div className="mt-2 flex flex-wrap gap-1.5">{['lucrare', 'ascultare', 'temă'].map((n) => <button key={n} type="button" onClick={() => setNote(n)} className={cx('rounded-lg px-2.5 py-1.5 text-[13px] font-700 ring-1', note === n ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{n}</button>)}</div>
+        </div>}
+      </div>
+      <div className="mt-5 flex gap-2">
+        <ShimmerButton className="flex-1" disabled={busy} onClick={tab === 'grade' ? saveGrade : saveAbsence}>{editing ? 'Salvează modificarea' : tab === 'grade' ? 'Adaugă nota' : 'Adaugă absența'}</ShimmerButton>
+        {editing && <button onClick={clear} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Renunță</button>}
+      </div>
+      {student.grades.length > 0 && <div className="mt-6">
+        <h4 className="mb-1 text-[12px] font-700 text-muted">Note</h4>
+        <ul>{student.grades.map((g) => (
+          <li key={g.id} className="flex items-center gap-2 border-t border-line py-1.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px]">{fmtDate(g.d)}{g.note && ` · ${g.note}`}{!g.mine && g.teacher && <span className="text-muted"> · {g.teacher}</span>}</span>
+            {g.mine && <><button onClick={() => editGrade(g)} aria-label={`Modifică nota ${g.v}`} className={iconBtn}><Icons.pencil size={16} /></button><button onClick={() => delGrade(g)} aria-label={`Șterge nota ${g.v}`} className={iconBtn}><Icons.trash size={16} /></button></>}
+          </li>
+        ))}</ul>
+      </div>}
+      {student.absences.length > 0 && <div className="mt-5">
+        <h4 className="mb-1 text-[12px] font-700 text-muted">Absențe</h4>
+        <ul>{student.absences.map((a) => (
+          <li key={a.id} className="flex items-center gap-2 border-t border-line py-1.5">
+            <span className="min-w-0 flex-1 truncate text-[13px]">{fmtDate(a.d)} · <span className={a.excused ? 'text-heat-calm' : 'text-heat-heavy'}>{a.excused ? 'motivată' : 'nemotivată'}</span>{!a.mine && a.teacher && <span className="text-muted"> · {a.teacher}</span>}</span>
+            {!a.excused && (a.mine || cat.isHomeroom) && <button onClick={() => run(API.patch(`/api/absences/${a.id}`, { excused: true }))} className="shrink-0 rounded-lg px-2 py-2 text-[12.5px] font-700 text-brand hover:bg-brand-50">Motivează</button>}
+            {a.mine && <><button onClick={() => editAbsence(a)} aria-label="Modifică absența" className={iconBtn}><Icons.pencil size={16} /></button><button onClick={() => delAbsence(a)} aria-label="Șterge absența" className={iconBtn}><Icons.trash size={16} /></button></>}
+          </li>
+        ))}</ul>
+      </div>}
+    </Modal>
+  );
+}
+function Motivari({ tick, onChanged }) {
+  const [m, setM] = useState(null);
+  const [err, setErr] = useState(null);
+  const load = useCallback(() => API.get('/api/teacher/motivari').then((d) => { setErr(null); setM(d); }).catch((e) => setErr(errText(e))), []);
+  useEffect(() => { load(); }, [load, tick]);
+  const excuse = (a) => API.patch(`/api/absences/${a.id}`, { excused: true }).then(onChanged).catch((e) => setErr(errText(e)));
+  return (
+    <section className="mt-6">
+      <h2 className="mb-3 font-display text-lg font-700">Motivări</h2>
+      {err && <div className="mb-3"><LoadFailed err={err} retry={load} /></div>}
+      {m && m.classes.map((c) => (
+        <div key={c.classId} className="mb-3 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+          <p className="border-b border-line p-3 text-[13px] font-700 text-muted">Dirigenție · {c.className}</p>
+          {c.absences.length === 0 ? <p className="p-4 text-center text-[13px] text-muted">Nicio absență nemotivată.</p>
+            : c.absences.map((a, i) => (
+              <div key={a.id} className={cx('flex items-center gap-3 p-3.5', i && 'border-t border-line')}>
+                <div className="min-w-0 flex-1"><p className="truncate font-700">{a.student}</p><p className="truncate text-[12.5px] text-muted">{fmtDate(a.d)} · {a.short}{a.teacher && ` · ${a.teacher}`}</p></div>
+                <button onClick={() => excuse(a)} className="shrink-0 rounded-lg bg-brand-50 px-3 py-2 text-[13px] font-700 text-brand-600 hover:bg-brand-100">Motivează</button>
+              </div>
+            ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function TeacherWorkload({ t }) {
   const [classId, setClassId] = useState(t.classes[0] ? t.classes[0].id : null);
   const [wl, setWl] = useState(null);
@@ -954,6 +1175,17 @@ function StudentToday({ s, reload, onGoto }) {
               </AnimatePresence>
             </ul>
           </motion.section>
+          {t.newGrades.length > 0 && (
+            <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
+              <button onClick={() => onGoto('marks')} className="mb-3 flex w-full items-center justify-between text-left"><h2 className="font-display text-lg font-700">Note noi</h2><Icons.chevR size={18} className="text-muted" /></button>
+              <ul className="space-y-1.5">{t.newGrades.map((g) => (
+                <li key={g.id} className="flex items-center gap-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px]"><b className="font-700">{g.short}</b> · {fmtDate(g.d)}{g.note && ` · ${g.note}`}</span>
+                </li>
+              ))}</ul>
+            </motion.section>
+          )}
           {t.pack.length > 0 && (
             <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
               <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-700"><Icons.bag size={18} className="text-brand" /> De pus în ghiozdan</h2>
@@ -991,9 +1223,7 @@ function StudentMarks({ s, reload }) {
 }
 function GradesPanel({ s, reload }) {
   const g = s.grades;
-  const subjectList = Object.keys(s.subjects).map((c) => ({ code: c, ...s.subjects[c] }));
   const [open, setOpen] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
   const animOverall = useCountUp(g.overall);
   return (
     <div>
@@ -1005,8 +1235,7 @@ function GradesPanel({ s, reload }) {
           {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
         </div>
       )}
-      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)}>Adaugă o notă</ShimmerButton></div>
-      {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Adaugă notele pe măsură ce le primești și SchoolPilot îți calculează mediile și de ce notă mai ai nevoie." />
+      {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Notele apar aici când le introduc profesorii. SchoolPilot îți calculează mediile și de ce notă mai ai nevoie." />
         : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {g.subjects.map((sub) => (
               <motion.div key={sub.code} layout className={cx('rounded-xl2 border bg-white p-4 shadow-card', sub.risk ? 'border-heat-heavy/30' : 'border-line')}>
@@ -1015,29 +1244,25 @@ function GradesPanel({ s, reload }) {
                     <div className="flex items-center gap-2.5"><Dot hue={sub.hue} size={12} /><span className="font-700">{sub.name}</span>{sub.risk && <Pill tone="heavy" className="bg-heat-heavybg">risc de corigență</Pill>}</div>
                     <div className="flex items-center gap-3"><span className="font-display text-2xl font-700 tnum" style={{ color: sub.risk ? '#D92626' : '#12201E' }}>{sub.avg.toFixed(2)}</span><motion.span animate={{ rotate: open === sub.code ? 180 : 0 }}><Icons.chevD size={18} className="text-muted" /></motion.span></div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">{sub.values.map((gr, i) => <span key={i} className="grid h-8 w-8 place-items-center rounded-lg text-sm font-700 tnum" style={{ background: gr.v >= 9 ? '#DEF7E6' : gr.v >= 7 ? '#E7FBF7' : gr.v >= 5 ? '#FBF1CF' : '#FBDFDF', color: gr.v >= 9 ? '#0F7C39' : gr.v >= 7 ? '#0B7A72' : gr.v >= 5 ? '#946500' : '#AE1919' }}>{gr.v}</span>)}</div>
                 </button>
+                <GradeChips values={sub.values} />
                 <AnimatePresence>{open === sub.code && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden"><div className="mt-4 border-t border-line pt-4"><WhatINeed s={s} subject={sub.code} avg={sub.avg} reload={reload} /></div></motion.div>}</AnimatePresence>
               </motion.div>
             ))}
           </div>}
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="ag-t"><AddGrade s={s} subjects={subjectList} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }} /></Sheet>
     </div>
   );
 }
-function AddGrade({ s, subjects, onClose, onSaved }) {
-  const [subject, setSubject] = useState('');
-  const [value, setValue] = useState(8);
-  const save = () => { if (!subject) return; API.post('/api/grades', { subject, value }).then(onSaved); };
+/* Tap (or hover) a grade to see its date, note and teacher. */
+function GradeChips({ values }) {
+  const [picked, setPicked] = useState(null);
+  const describe = (g) => [fmtDate(g.d), g.note, g.teacher].filter(Boolean).join(' · ');
+  const shown = values.find((g) => g.id === picked);
   return (
-    <Modal>
-      <h3 id="ag-t" className="font-display text-xl font-700">Adaugă o notă</h3>
-      <div className="mt-4 space-y-4">
-        <Field label="Materie"><SubjectSelect subjects={subjects} value={subject} onChange={setSubject} /></Field>
-        <div><span className="mb-1 block text-[12px] font-700 text-muted">Nota</span><Stepper value={value} set={setValue} /></div>
-      </div>
-      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Salvează nota</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
-    </Modal>
+    <div className="mt-3">
+      <div className="flex flex-wrap gap-1.5">{values.map((g) => <button key={g.id} title={describe(g)} aria-label={`Nota ${g.v}, ${describe(g)}`} aria-pressed={picked === g.id} onClick={() => setPicked(picked === g.id ? null : g.id)} className={cx('grid h-9 w-9 place-items-center rounded-lg text-sm font-700 tnum', picked === g.id && 'ring-2 ring-brand')} style={gradeStyle(g.v)}>{g.v}</button>)}</div>
+      {shown && <p className="mt-2 text-[12.5px] text-muted">{describe(shown)}</p>}
+    </div>
   );
 }
 function WhatINeed({ s, subject, avg, reload }) {
@@ -1062,8 +1287,6 @@ function WhatINeed({ s, subject, avg, reload }) {
 }
 function AbsencesPanel({ s, reload }) {
   const a = s.absences;
-  const subjectList = Object.keys(s.subjects).map((c) => ({ code: c, ...s.subjects[c] }));
-  const [addOpen, setAddOpen] = useState(false);
   return (
     <div>
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -1071,7 +1294,6 @@ function AbsencesPanel({ s, reload }) {
         <StatTile label="Motivate" value={a.totEx} tone="#16A34A" icon={<Icons.check size={16} />} />
         <StatTile label="Total" value={a.totUn + a.totEx} tone="#5E6E6B" icon={<Icons.calendar size={16} />} />
       </div>
-      <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)}>Adaugă o absență</ShimmerButton></div>
       {a.totUn >= 2 && <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm"><Icons.alert size={18} className="shrink-0 text-heat-light" /><span className="text-ink/80">{a.totUn >= a.threshold
         ? <><b>Ai depășit pragul</b> de {a.threshold} absențe nemotivate care îți scade nota la purtare.</>
         : <>Mai ai <b>{a.threshold - a.totUn} {a.threshold - a.totUn === 1 ? 'absență nemotivată' : 'absențe nemotivate'}</b> până la pragul care îți scade nota la purtare.</>}</span></div>}
@@ -1080,28 +1302,12 @@ function AbsencesPanel({ s, reload }) {
             {a.subjects.map((sub, i) => (
               <div key={sub.code} className={cx('flex items-center gap-3 p-4', i && 'border-t border-line')}>
                 <Dot hue={sub.hue} size={12} /><span className="flex-1 font-700">{sub.name}</span>
-                {sub.unexcused > 0 && <span className="rounded-lg bg-heat-heavybg px-2.5 py-1 text-[13px] font-700 text-heat-heavy tnum">{sub.unexcused} nemotivate</span>}
-                {sub.excused > 0 && <span className="rounded-lg bg-heat-calmbg px-2.5 py-1 text-[13px] font-700 text-heat-calm tnum">{sub.excused} motivate</span>}
+                {sub.unexcused > 0 && <span className="rounded-lg bg-heat-heavybg px-2.5 py-1 text-[13px] font-700 text-heat-heavy tnum">{sub.unexcused} {sub.unexcused === 1 ? 'nemotivată' : 'nemotivate'}</span>}
+                {sub.excused > 0 && <span className="rounded-lg bg-heat-calmbg px-2.5 py-1 text-[13px] font-700 text-heat-calm tnum">{sub.excused} {sub.excused === 1 ? 'motivată' : 'motivate'}</span>}
               </div>
             ))}
           </div>}
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="ab-t"><AddAbsence s={s} subjects={subjectList} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }} /></Sheet>
     </div>
-  );
-}
-function AddAbsence({ s, subjects, onClose, onSaved }) {
-  const [subject, setSubject] = useState('');
-  const [kind, setKind] = useState('unexcused');
-  const save = () => { if (!subject) return; API.post('/api/absences', { subject, kind }).then(onSaved); };
-  return (
-    <Modal>
-      <h3 id="ab-t" className="font-display text-xl font-700">Adaugă o absență</h3>
-      <div className="mt-4 space-y-4">
-        <Field label="Materie"><SubjectSelect subjects={subjects} value={subject} onChange={setSubject} /></Field>
-        <div><span className="mb-1 block text-[12px] font-700 text-muted">Tip</span><div className="flex gap-1.5">{[['unexcused', 'Nemotivată'], ['excused', 'Motivată']].map(([k, l]) => <button key={k} onClick={() => setKind(k)} className={cx('flex-1 rounded-lg px-2 py-2 text-[13px] font-700 ring-1', kind === k ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{l}</button>)}</div></div>
-      </div>
-      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Salvează</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
-    </Modal>
   );
 }
 

@@ -15,7 +15,7 @@ import json
 import random
 from datetime import datetime, timedelta
 
-from server import MONTHS, connect, init_db, iso, today, week_monday
+from server import connect, init_db, iso, today, week_monday
 
 SCHOOL = "Liceul Teoretic Demo"
 CLASS = "10B"
@@ -62,10 +62,6 @@ def wipe(con):
     con.execute("DELETE FROM users WHERE role!='admin'")
 
 
-def grade_date(d):
-    return "%d %s" % (d.day, MONTHS[d.month])
-
-
 def seed(con):
     rnd = random.Random(10)
     now = datetime.now().isoformat()
@@ -85,6 +81,8 @@ def seed(con):
     for name in STUDENTS:
         students[name] = con.execute("INSERT INTO users(role,name,school_id,class_id) VALUES('student',?,?,?)",
                                      (name, sid, cid)).lastrowid
+
+    con.execute("UPDATE classes SET homeroom_teacher_id=? WHERE id=?", (teacher_of["mate"], cid))
 
     for day, row in enumerate(TIMETABLE):
         for period, subj in enumerate(row):
@@ -123,8 +121,8 @@ def seed(con):
                     values = [max(v, 6) for v in values]
             for i, v in enumerate(values):
                 d = t - timedelta(days=42 - i * 10 - rnd.randint(0, 5))
-                con.execute("INSERT INTO grades(student_id,subject,value,date) VALUES(?,?,?,?)",
-                            (uid, subj, v, grade_date(d)))
+                con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
+                            (uid, subj, v, iso(d), teacher_of[subj], rnd.choice(["lucrare", "ascultare", "temă"])))
 
     # --- absences ---
     for name, uid in students.items():
@@ -133,8 +131,9 @@ def seed(con):
         for kind, count in (("unexcused", n_un), ("excused", n_ex)):
             for _ in range(count):
                 d = t - timedelta(days=rnd.randint(3, 40))
-                con.execute("INSERT INTO absences(student_id,subject,kind,date) VALUES(?,?,?,?)",
-                            (uid, rnd.choice(graded_subjects), kind, iso(d)))
+                subj = rnd.choice(graded_subjects)
+                con.execute("INSERT INTO absences(student_id,subject,kind,date,teacher_id) VALUES(?,?,?,?,?)",
+                            (uid, subj, kind, iso(d), teacher_of[subj]))
 
     # --- a few personal tasks for the at-risk student ---
     uid = students[AT_RISK]
