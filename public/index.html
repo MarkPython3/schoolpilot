@@ -963,7 +963,9 @@ function AbsencesPanel({ s, reload }) {
         <StatTile label="Total" value={a.totUn + a.totEx} tone="#5E6E6B" icon={<Icons.calendar size={16} />} />
       </div>
       <div className="mb-4"><ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)}>Adaugă o absență</ShimmerButton></div>
-      {a.totUn >= 2 && <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm"><Icons.alert size={18} className="shrink-0 text-heat-light" /><span className="text-ink/80">Mai ai <b>{a.threshold - a.totUn} absențe nemotivate</b> până la pragul care îți scade nota la purtare.</span></div>}
+      {a.totUn >= 2 && <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm"><Icons.alert size={18} className="shrink-0 text-heat-light" /><span className="text-ink/80">{a.totUn >= a.threshold
+        ? <><b>Ai depășit pragul</b> de {a.threshold} absențe nemotivate care îți scade nota la purtare.</>
+        : <>Mai ai <b>{a.threshold - a.totUn} {a.threshold - a.totUn === 1 ? 'absență nemotivată' : 'absențe nemotivate'}</b> până la pragul care îți scade nota la purtare.</>}</span></div>}
       {a.subjects.length === 0 ? <Empty icon={<Icons.calendar size={26} />} title="Nicio absență" body="Perfect — zero absențe. Pe măsură ce apar, le urmărești aici, motivate și nemotivate." />
         : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
             {a.subjects.map((sub, i) => (
