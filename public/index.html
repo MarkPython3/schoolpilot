@@ -85,7 +85,7 @@ const API = {
   patch: (p, b) => jfetch(p, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }),
   del: (p) => jfetch(p, { method: 'DELETE' }),
 };
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 /* ---------------- Icons ---------------- */
 const Ic = ({ size = 20, fill = false, sw = 1.75, children, ...p }) => (
