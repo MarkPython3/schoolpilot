@@ -724,7 +724,9 @@ function TeacherWorkload({ t }) {
         <div className="mb-4 flex items-start gap-3 rounded-xl2 border border-heat-heavy/25 bg-heat-heavybg/60 p-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-heat-heavy shadow-sm"><Icons.alert size={18} /></span>
           <div className="text-sm"><p className="font-700 text-heat-heavy">Coliziune de evaluări în {myClass.name}</p>
-            {wl.collisions.map((c, i) => <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()})`).join(' + ')}. Ia în calcul o altă zi.</p>)}
+            {wl.collisions.map((c, i) => c.kind === 'window'
+              ? <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.length} evaluări în 48 de ore — {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()}, ${x.dateLabel})`).join(' + ')}. Ia în calcul o altă zi.</p>
+              : <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()})`).join(' + ')}. Ia în calcul o altă zi.</p>)}
           </div>
         </div>
       )}

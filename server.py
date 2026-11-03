@@ -224,13 +224,27 @@ def class_workload(con, class_id):
                          "items": [{"subject": it["subject"], "type": it["type"],
                                     "short": subj_short(it["subject"]), "title": it["title"]} for it in items]})
         weeks.append({"label": "Săptămâna aceasta" if w == 0 else "Săptămâna viitoare", "days": days})
-    collisions = []
-    for wk in weeks:
-        for day in wk["days"]:
-            graded = [it for it in day["items"] if it["type"] != "tema"]
-            if len(graded) >= 2:
-                collisions.append({"dateLabel": day["dateLabel"], "items": graded})
     flat = [d for wk in weeks for d in wk["days"]]
+    graded_of = lambda day: [it for it in day["items"] if it["type"] != "tema"]
+    collisions = []
+    # two+ graded assessments on the same day
+    for day in flat:
+        graded = graded_of(day)
+        if len(graded) >= 2:
+            collisions.append({"kind": "day", "date": day["date"], "dateLabel": day["dateLabel"], "items": graded})
+    # three+ graded within 48h, i.e. on two consecutive days (dates have no time).
+    # A window whose items all sit on one day is already covered above.
+    for a, b in zip(flat, flat[1:]):
+        if (parse_iso(b["date"]) - parse_iso(a["date"])).days != 1:
+            continue
+        ga, gb = graded_of(a), graded_of(b)
+        if ga and gb and len(ga) + len(gb) >= 3:
+            a["clash"] = b["clash"] = True
+            collisions.append({"kind": "window", "date": a["date"],
+                               "dateLabel": "%s – %s" % (a["dateLabel"], b["dateLabel"]),
+                               "items": [{**it, "dateLabel": a["dateLabel"]} for it in ga] +
+                                        [{**it, "dateLabel": b["dateLabel"]} for it in gb]})
+    collisions.sort(key=lambda c: c["date"])
     upcoming = [d for d in flat if parse_iso(d["date"]) >= today()]
     suggestions = sorted(upcoming, key=lambda d: d["score"])[:3]
     return {"weeks": weeks, "collisions": collisions, "suggestions": suggestions}
