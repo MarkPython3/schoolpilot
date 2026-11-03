@@ -20,6 +20,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+def load_env(path=os.path.join(ROOT, ".env")):
+    """Minimal .env reader: KEY=VALUE lines; real environment variables win."""
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+load_env()
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
+SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")  # server-side only, never send or log
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 PUBLIC = os.path.join(ROOT, "public")
 DB_PATH = os.environ.get("DB", os.path.join(ROOT, "schoolpilot.db"))
 PORT = int(os.environ.get("PORT", "8000"))
@@ -476,6 +494,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self, p, con):
         q = self._query()
+        if p == "/api/config":
+            return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY})
         if p == "/api/accounts":
             return self._json({"accounts": build_accounts(con)})
         if p == "/api/subjects":
