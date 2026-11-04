@@ -71,6 +71,7 @@ and nothing else — you build the rest.
 - **Azi** — morning brief: today's lessons, what to pack, what's due (tick tasks done), announcements, and new grades from the last 3 days. A warning appears when tests pile up, with where to start revising; from 15:00 it also shows the next school day and what to pack for it.
 - **Orar** — their class timetable with assessment markers, the class workload for two weeks and every upcoming test or assignment.
 - **Anunțuri** — feed for their class and school; recent ones also appear on Azi.
+- **Mesaje** — one-to-one with the teachers of their class, with templates and anonymous questions. Pupils can't message each other, and messages sent between 20:00 and 07:00 reach the teacher in the morning.
 - **Notificări** — new or changed grades, absences (and when they're excused), announced tests and assignments, plus a reminder when one is due today or tomorrow; a badge counts the unread ones.
 - **Catalog** — read-only grades (date, note and teacher on tap/hover, averages, "what do I need?" calculator) and absences.
 

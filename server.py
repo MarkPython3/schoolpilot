@@ -89,6 +89,8 @@ LESSON_MINUTES = 50
 DEFAULT_MODULES = [(1, "2026-09-07", "2026-10-23"), (2, "2026-11-02", "2026-12-22"), (3, "2027-01-11", "2027-02-12"),
                    (4, "2027-02-22", "2027-04-23"), (5, "2027-05-05", "2027-06-18")]
 PRIORITIES = ("urgent", "normal", "info")
+EVENT_KINDS = {"club": "Club", "olimpiada": "Olimpiadă", "concurs": "Concurs", "termen": "Termen", "altul": "Eveniment"}
+QUIET_START, QUIET_END = 20, 7  # messages to teachers wait until the morning
 EVENING_HOUR = 15  # from this hour the student's Azi page also shows the next school day
 RISK_AVERAGE = 6
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
@@ -143,6 +145,14 @@ CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   day INTEGER NOT NULL, period INTEGER NOT NULL,
   subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
+);
+CREATE TABLE IF NOT EXISTS school_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, title TEXT NOT NULL, date TEXT NOT NULL,
+  kind TEXT NOT NULL, note TEXT, author_id INTEGER, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER NOT NULL, recipient_id INTEGER NOT NULL, body TEXT NOT NULL,
+  anonymous INTEGER NOT NULL DEFAULT 0, reply_to INTEGER, created_at TEXT NOT NULL, visible_at TEXT NOT NULL, read_at TEXT
 );
 CREATE TABLE IF NOT EXISTS lesson_changes (
   id INTEGER PRIMARY KEY AUTOINCREMENT, timetable_id INTEGER NOT NULL, class_id INTEGER NOT NULL, date TEXT NOT NULL,
@@ -382,6 +392,8 @@ def remove_users(con, rows):
         for t in ("grades", "absences", "tasks", "notifications", "announcement_reads", "subject_goals"):
             con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
         con.execute("UPDATE announcements SET author_id=NULL WHERE author_id=?", (uid,))
+        con.execute("UPDATE school_events SET author_id=NULL WHERE author_id=?", (uid,))
+        con.execute("DELETE FROM messages WHERE sender_id=? OR recipient_id=?", (uid, uid))
         for t in ("timetable", "assessments", "grades", "absences", "lesson_changes"):
             con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
         con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
@@ -423,6 +435,152 @@ def add_due_reminders(con, uid, class_id):
         what = TYPE_LABEL.get(a["type"], "Evaluare")
         notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
                subj_name(a["subject"]), ref)
+
+def build_events(con, me, school_id=None):
+    sid = school_id if me["role"] == "admin" else me["school_id"]
+    rows = con.execute("SELECT * FROM school_events WHERE school_id=? AND date>=? ORDER BY date, id", (sid, iso(today()))).fetchall()
+    return {"kinds": EVENT_KINDS, "items": [{"id": r["id"], "title": r["title"], "date": r["date"], "kind": r["kind"], "kindLabel": EVENT_KINDS.get(r["kind"], "Eveniment"),
+                                             "note": r["note"] or "", "canDelete": me["role"] == "admin" or r["author_id"] == me["id"]} for r in rows]}
+
+def post_event(con, me, body, now):
+    need(me, "teacher", "admin")
+    title = (body.get("title") or "").strip()[:120]
+    kind = body.get("kind") if body.get("kind") in EVENT_KINDS else "altul"
+    school_id = int(body["schoolId"]) if me["role"] == "admin" else me["school_id"]
+    if not title:
+        raise HttpError(400, "Scrie un titlu.")
+    try:
+        day = iso(parse_iso(body.get("date")))
+    except (TypeError, ValueError):
+        raise HttpError(400, "Data nu este validă.")
+    if day < iso(today()):
+        raise HttpError(400, "Alege o dată viitoare.")
+    note = (body.get("note") or "").strip()[:300]
+    cur = con.execute("INSERT INTO school_events(school_id,title,date,kind,note,author_id,created_at) VALUES(?,?,?,?,?,?,?)",
+                      (school_id, title, day, kind, note, me["id"], now))
+    for sid in audience(con, school_id, None):
+        notify(con, sid, "event", "%s: %s" % (EVENT_KINDS[kind], title), "Pe %s" % date_text(day), "event:%d" % cur.lastrowid)
+    return {"id": cur.lastrowid}
+
+def ics_text(value):
+    return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+def build_calendar(con, me):
+    """iCalendar file text: the student's upcoming tests, assignments and school events."""
+    entries = []
+    if me["class_id"]:
+        for a in con.execute("SELECT * FROM assessments WHERE class_id=? AND date>=?", (me["class_id"], iso(today()))).fetchall():
+            entries.append(("a%d" % a["id"], a["date"], "%s: %s (%s)" % (TYPE_LABEL[a["type"]], a["title"], subj_name(a["subject"]))))
+    for e in con.execute("SELECT * FROM school_events WHERE school_id=? AND date>=?", (me["school_id"], iso(today()))).fetchall():
+        entries.append(("e%d" % e["id"], e["date"], e["title"]))
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SchoolPilot//RO"]
+    for uid, day, title in sorted(entries, key=lambda x: x[1]):
+        start = parse_iso(day)
+        lines += ["BEGIN:VEVENT", "UID:%s@schoolpilot" % uid, "DTSTAMP:%s" % stamp, "DTSTART;VALUE=DATE:%s" % start.strftime("%Y%m%d"),
+                  "DTEND;VALUE=DATE:%s" % (start + timedelta(days=1)).strftime("%Y%m%d"), "SUMMARY:%s" % ics_text(title), "END:VEVENT"]
+    return {"ics": "\r\n".join(lines + ["END:VCALENDAR"]) + "\r\n", "count": len(entries)}
+
+def class_insights(con, class_id):
+    """School-wide picture for the admin: where a class is overloaded or struggling."""
+    wl = class_workload(con, class_id)
+    days = [d for wk in wl["weeks"] for d in wk["days"]]
+    busiest = max(days, key=lambda d: d["score"])
+    grades = con.execute("""SELECT g.student_id, g.subject, AVG(g.value) a FROM grades g JOIN users u ON u.id=g.student_id
+                            WHERE u.class_id=? GROUP BY g.student_id, g.subject""", (class_id,)).fetchall()
+    unexcused = con.execute("""SELECT COUNT(*) n FROM absences a JOIN users u ON u.id=a.student_id
+                               WHERE u.class_id=? AND a.kind='unexcused'""", (class_id,)).fetchone()["n"]
+    return {"clashes": len(wl["collisions"]), "busiest": busiest["dateLabel"] if busiest["score"] else None,
+            "average": round(sum(g["a"] for g in grades) / len(grades), 2) if grades else None,
+            "atRisk": sum(1 for g in grades if g["a"] < RISK_AVERAGE), "unexcused": unexcused}
+
+def message_contacts(con, me):
+    """Students talk only to the teachers of their class; never to each other."""
+    if me["role"] == "student":
+        if not me["class_id"]:
+            return []
+        rows = con.execute("""SELECT DISTINCT u.id, u.name FROM users u WHERE u.role='teacher' AND (
+                                u.id IN (SELECT teacher_id FROM timetable WHERE class_id=?)
+                                OR u.id=(SELECT homeroom_teacher_id FROM classes WHERE id=?)) ORDER BY u.name""", (me["class_id"], me["class_id"])).fetchall()
+        out = []
+        for r in rows:
+            subjects = teacher_subjects(con, r["id"], me["class_id"])
+            out.append({"id": r["id"], "name": r["name"], "detail": ", ".join(subj_short(c) for c in subjects)})
+        return out
+    if me["role"] == "teacher":
+        ids = announcement_class_ids(con, me["id"])
+        rows = con.execute("SELECT id,name,class_id FROM users WHERE role='student' AND class_id IN (%s) ORDER BY name" % (",".join("?" * len(ids)) or "NULL"), ids).fetchall()
+        return [{"id": r["id"], "name": r["name"], "detail": class_name(con, r["class_id"])} for r in rows]
+    return []
+
+def delivery_time(moment):
+    """Quiet hours: a message sent to a teacher late at night appears at 07:00."""
+    if moment.hour >= QUIET_START:
+        return (moment + timedelta(days=1)).replace(hour=QUIET_END, minute=0, second=0, microsecond=0)
+    if moment.hour < QUIET_END:
+        return moment.replace(hour=QUIET_END, minute=0, second=0, microsecond=0)
+    return moment
+
+def unread_messages(con, uid):
+    return con.execute("SELECT COUNT(*) n FROM messages WHERE recipient_id=? AND read_at IS NULL AND visible_at<=?",
+                       (uid, datetime.now().isoformat(timespec="seconds"))).fetchone()["n"]
+
+def message_row(r, uid):
+    return {"id": r["id"], "mine": r["sender_id"] == uid, "body": r["body"], "at": r["created_at"], "anonymous": bool(r["anonymous"]),
+            "pending": r["sender_id"] == uid and r["visible_at"] > datetime.now().isoformat(timespec="seconds")}
+
+def build_threads(con, me):
+    uid, now, threads = me["id"], datetime.now().isoformat(timespec="seconds"), {}
+    rows = con.execute("SELECT * FROM messages WHERE (sender_id=? OR (recipient_id=? AND visible_at<=?)) ORDER BY id", (uid, uid, now)).fetchall()
+    for r in rows:
+        if me["role"] == "teacher" and r["anonymous"]:  # never tied to the student's name on the teacher's side
+            root = r["reply_to"] or r["id"]
+            key, name, other = "anon:%d" % root, "Întrebare anonimă", None
+        else:
+            other = r["recipient_id"] if r["sender_id"] == uid else r["sender_id"]
+            key, name = "user:%d" % other, (user_row(con, other) or {"name": "Cont șters"})["name"]
+        t = threads.setdefault(key, {"key": key, "name": name, "anonymous": other is None, "unread": 0})
+        t.update({"last": r["body"][:80], "at": r["created_at"], "lastId": r["id"]})
+        if r["recipient_id"] == uid and not r["read_at"]:
+            t["unread"] += 1
+    return {"contacts": message_contacts(con, me), "threads": sorted(threads.values(), key=lambda t: -t["lastId"]), "quietHours": [QUIET_START, QUIET_END]}
+
+def thread_rows(con, me, key):
+    uid, now = me["id"], datetime.now().isoformat(timespec="seconds")
+    if key.startswith("anon:"):
+        need(me, "teacher")
+        root = int(key[5:])
+        return con.execute("""SELECT * FROM messages WHERE anonymous=1 AND (id=? OR reply_to=?) AND (sender_id=? OR recipient_id=?)
+                              AND (sender_id=? OR visible_at<=?) ORDER BY id""", (root, root, uid, uid, uid, now)).fetchall()
+    other = int(key[5:])
+    hide_anon = "AND anonymous=0" if me["role"] == "teacher" else ""
+    return con.execute("""SELECT * FROM messages WHERE ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=? AND visible_at<=?)) %s
+                          ORDER BY id""" % hide_anon, (uid, other, other, uid, now)).fetchall()
+
+def send_message(con, me, body):
+    need(me, "student", "teacher")
+    text = (body.get("body") or "").strip()
+    if not text or len(text) > 1000:
+        raise HttpError(400, "Mesajul are între 1 și 1000 de caractere.")
+    moment, anonymous, reply_to = datetime.now(), 0, None
+    key = body.get("thread") or ""
+    if key.startswith("anon:"):  # a teacher answering an anonymous question
+        need(me, "teacher")
+        q = con.execute("SELECT * FROM messages WHERE id=? AND anonymous=1 AND recipient_id=?", (int(key[5:]), me["id"])).fetchone()
+        if not q:
+            raise HttpError(404, "not found")
+        to, anonymous, reply_to = q["sender_id"], 1, q["id"]
+    else:
+        to = int(key[5:]) if key.startswith("user:") else int(body["to"])
+        if to not in [c["id"] for c in message_contacts(con, me)]:
+            raise HttpError(403, "Nu poți scrie acestei persoane.")
+        anonymous = 1 if body.get("anonymous") and me["role"] == "student" else 0
+    visible = delivery_time(moment) if me["role"] == "student" else moment
+    cur = con.execute("INSERT INTO messages(sender_id,recipient_id,body,anonymous,reply_to,created_at,visible_at) VALUES(?,?,?,?,?,?,?)",
+                      (me["id"], to, text, anonymous, reply_to, moment.isoformat(timespec="seconds"), visible.isoformat(timespec="seconds")))
+    if me["role"] == "teacher":
+        notify(con, to, "message", "Mesaj de la %s" % me["name"], text[:80], "message:%d" % cur.lastrowid)
+    return {"id": cur.lastrowid, "delayed": visible > moment, "thread": key or "user:%d" % to}
 
 def change_label(r, con):
     if r["kind"] == "cancelled":
@@ -749,6 +907,8 @@ def build_admin(con):
         students = [{"id": u["id"], "name": u["name"], "classId": u["class_id"],
                      "className": class_name(con, u["class_id"]), "email": u["email"], "hasLogin": bool(u["auth_id"])}
                     for u in con.execute("SELECT * FROM users WHERE role='student' AND school_id=? ORDER BY name", (sid,)).fetchall()]
+        for c in classes:
+            c["insights"] = class_insights(con, c["id"])
         schools.append({"id": sid, "name": s["name"], "classes": classes,
                         "teachers": teachers, "students": students, "modules": school_modules(con, sid)})
     return {"schools": schools, "subjects": subjects_catalog(), "periods": PERIODS}
@@ -859,6 +1019,7 @@ def build_teacher(con, uid):
                     "subjects": json.loads(u["subjects"] or "[]")},
         "classes": classes, "homerooms": homerooms, "schedule": schedule, "periods": PERIODS,
         "todayIdx": wd if wd <= 4 else None,
+        "unreadMessages": unread_messages(con, uid),
         "subjectCatalog": subjects_catalog(),
         "colleagues": [{"id": c["id"], "name": c["name"]} for c in con.execute(
             "SELECT id,name FROM users WHERE role='teacher' AND school_id=? AND id!=? ORDER BY name", (u["school_id"], uid)).fetchall()],
@@ -1037,7 +1198,7 @@ def build_student(con, uid):
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
         "tasks": tasks,
         "grades": grades, "absences": absences,
-        "workload": workload, "upcoming": upcoming,
+        "workload": workload, "upcoming": upcoming, "unreadMessages": unread_messages(con, uid),
         "hasTimetable": bool(cid and any(any(row) for row in tt)),
         "unread": unread_count(con, uid),
     }
@@ -1228,6 +1389,20 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/student":
             need(me, "student")
             return build_student(con, me["id"])
+        if p == "/api/events":
+            return build_events(con, me, int(q["schoolId"][0]) if me["role"] == "admin" else None)
+        if p == "/api/calendar":
+            need(me, "student")
+            return build_calendar(con, me)
+        if p == "/api/messages":
+            need(me, "student", "teacher")
+            return build_threads(con, me)
+        if p == "/api/messages/thread":
+            need(me, "student", "teacher")
+            rows = thread_rows(con, me, q["key"][0])
+            con.execute("UPDATE messages SET read_at=? WHERE recipient_id=? AND read_at IS NULL AND id IN (%s)" % (",".join(str(r["id"]) for r in rows) or "NULL"),
+                        (datetime.now().isoformat(timespec="seconds"), me["id"]))
+            return {"messages": [message_row(r, me["id"]) for r in rows]}
         if p == "/api/announcements":
             if me["role"] == "admin":
                 return build_announcements(con, me, int(q["schoolId"][0]))
@@ -1274,6 +1449,7 @@ class Handler(BaseHTTPRequestHandler):
         if m and method == "DELETE":
             sid = int(m.group(1))
             con.execute("DELETE FROM school_modules WHERE school_id=?", (sid,))
+            con.execute("DELETE FROM school_events WHERE school_id=?", (sid,))
             for a in con.execute("SELECT id FROM announcements WHERE school_id=?", (sid,)).fetchall():
                 delete_announcement(con, a["id"])
             cids = [r["id"] for r in con.execute("SELECT id FROM classes WHERE school_id=?", (sid,)).fetchall()]
@@ -1371,6 +1547,21 @@ class Handler(BaseHTTPRequestHandler):
                 raise HttpError(404, "not found")
             drop_notifications(con, "change:%s" % m.group(1))
             return {"ok": True}
+
+        # ---------- events and messages ----------
+        if p == "/api/events" and method == "POST":
+            return post_event(con, me, body, now)
+        m = re.match(r"^/api/events/(\d+)$", p)
+        if m and method == "DELETE":
+            need(me, "teacher", "admin")
+            r = con.execute("SELECT * FROM school_events WHERE id=?", (int(m.group(1)),)).fetchone()
+            if not r or (me["role"] != "admin" and r["author_id"] != me["id"]):
+                raise HttpError(404, "not found")
+            con.execute("DELETE FROM school_events WHERE id=?", (r["id"],))
+            drop_notifications(con, "event:%d" % r["id"])
+            return {"ok": True}
+        if p == "/api/messages" and method == "POST":
+            return send_message(con, me, body)
 
         # ---------- student goals ----------
         if p == "/api/goals" and method == "POST":
@@ -1520,7 +1711,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
-            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "lesson_changes", "subject_goals", "classes", "schools"]:
+            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "lesson_changes", "subject_goals", "school_events", "messages", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
             return {"ok": True}
 
