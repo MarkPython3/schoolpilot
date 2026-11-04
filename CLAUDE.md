@@ -24,6 +24,7 @@ Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called
 - Grades and absences are entered only by teachers; students read them. `need_student_subject` checks the timetable (a teacher may act only on subjects they teach in that student's class), `owned_row` limits edit/delete to the teacher who entered the row, and an absence can be excused by its recorder or the class's diriginte (`classes.homeroom_teacher_id`, set by the admin).
 - A timetable row has `time` / `end_time`; `slot_time()` and `slot_end()` fall back to `PERIODS[period]` and a 50-minute lesson. `period` is only a free storage slot: `TimetableGrid` lists each day by start time.
 - Student notifications are rows in `notifications`, written by `notify()` in the same route as the change. `ref` (`grade:12`, `absence:3`, `assessment:7`, `reminder:7`) links them to their source so deleting it removes them; `add_due_reminders()` creates reminders when the student's data is read, so there is no background job.
+- Shared UI in `index.html`: `toast.success/error/info` (every save, delete and API error), `await askConfirm({ title, body, action })` (never the browser `confirm()`), `SearchSelect` (pass `inline` inside sheets). They were adapted by hand from Watermelon UI; there is no shadcn CLI here.
 - Dates are stored as ISO `YYYY-MM-DD`; the frontend formats them with `fmtDate`.
 - Schema changes for existing databases go in `ADDED_COLUMNS` / `migrate()`, which run on every start and back up the DB to `<db>.pre-migration.db` the first time.
 
