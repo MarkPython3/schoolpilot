@@ -85,6 +85,7 @@ SUBJECTS = {
 }
 PERIODS = ["%02d:00" % h for h in range(8, 22)]  # one slot per entry; a day holds at most this many
 LESSON_MINUTES = 50
+PRIORITIES = ("urgent", "normal", "info")
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
 TYPE_LABEL = {"test": "Lucrare", "quiz": "Ascultare", "tema": "Temă"}
 DAYNAMES = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"]
@@ -137,6 +138,14 @@ CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   day INTEGER NOT NULL, period INTEGER NOT NULL,
   subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
+);
+CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, class_id INTEGER, subject TEXT,
+  author_id INTEGER, title TEXT NOT NULL, body TEXT, priority TEXT NOT NULL DEFAULT 'normal', created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS announcement_reads (
+  announcement_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at TEXT NOT NULL,
+  PRIMARY KEY (announcement_id, student_id)
 );
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, kind TEXT NOT NULL,
@@ -353,8 +362,9 @@ def remove_users(con, rows):
         if r["email"]:
             forget_email(r["email"])
         uid = r["id"]
-        for t in ("grades", "absences", "tasks", "notifications"):
+        for t in ("grades", "absences", "tasks", "notifications", "announcement_reads"):
             con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
+        con.execute("UPDATE announcements SET author_id=NULL WHERE author_id=?", (uid,))
         for t in ("timetable", "assessments", "grades", "absences"):
             con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
         con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
@@ -407,6 +417,87 @@ def build_notifications(con, uid, class_id):
     return {"unread": unread_count(con, uid),
             "items": [{"id": r["id"], "kind": r["kind"], "title": r["title"], "body": r["body"] or "",
                        "createdAt": r["created_at"], "read": bool(r["read"])} for r in rows]}
+
+def announcement_class_ids(con, uid):
+    """Classes a teacher can post to: the ones they teach, plus the ones they're diriginte of."""
+    ids = teacher_class_ids(con, uid)
+    ids += [c["id"] for c in con.execute("SELECT id FROM classes WHERE homeroom_teacher_id=?", (uid,)).fetchall() if c["id"] not in ids]
+    return ids
+
+def audience(con, school_id, class_id):
+    """Ids of the students an announcement reaches."""
+    if class_id:
+        rows = con.execute("SELECT id FROM users WHERE role='student' AND class_id=?", (class_id,)).fetchall()
+    else:
+        rows = con.execute("SELECT id FROM users WHERE role='student' AND school_id=?", (school_id,)).fetchall()
+    return [r["id"] for r in rows]
+
+def delete_announcement(con, announcement_id):
+    con.execute("DELETE FROM announcement_reads WHERE announcement_id=?", (announcement_id,))
+    con.execute("DELETE FROM announcements WHERE id=?", (announcement_id,))
+    drop_notifications(con, "announcement:%d" % announcement_id)
+
+def post_announcement(con, me, body, now):
+    title, text = (body.get("title") or "").strip(), (body.get("body") or "").strip()
+    priority, subject = body.get("priority", "normal"), body.get("subject") or None
+    class_id = int(body["classId"]) if body.get("classId") else None
+    if not title or len(title) > 120:
+        raise HttpError(400, "Titlul este obligatoriu și are cel mult 120 de caractere.")
+    if len(text) > 2000:
+        raise HttpError(400, "Textul are cel mult 2000 de caractere.")
+    if priority not in PRIORITIES:
+        raise HttpError(400, "Prioritatea nu este validă.")
+    if me["role"] == "admin":
+        school_id = int(body["schoolId"])
+        if not con.execute("SELECT 1 FROM schools WHERE id=?", (school_id,)).fetchone():
+            raise HttpError(404, "Școala nu există.")
+        if class_id and not con.execute("SELECT 1 FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone():
+            raise HttpError(400, "Clasa nu face parte din această școală.")
+        subject = None
+    else:
+        school_id = me["school_id"]
+        if class_id not in announcement_class_ids(con, me["id"]):  # teachers can't post to the whole school
+            raise HttpError(403, "Nu ai acces la această clasă.")
+        if subject and subject not in teacher_subjects(con, me["id"], class_id):
+            raise HttpError(403, "Nu predai această materie la clasa aleasă.")
+    cur = con.execute("INSERT INTO announcements(school_id,class_id,subject,author_id,title,body,priority,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                      (school_id, class_id, subject, me["id"], title, text, priority, now[:19]))
+    heading = "%s: %s" % ("Anunț urgent" if priority == "urgent" else "Anunț", title)
+    target = class_name(con, class_id) if class_id else "Toată școala"
+    for sid in audience(con, school_id, class_id):
+        notify(con, sid, "announcement", heading, "%s · %s" % (me["name"], target), "announcement:%d" % cur.lastrowid)
+    return {"id": cur.lastrowid}
+
+def build_announcements(con, me, school_id=None):
+    uid = me["id"]
+    if me["role"] == "admin":
+        rows = con.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC LIMIT 100", (school_id,)).fetchall()
+    elif me["role"] == "teacher":
+        ids = announcement_class_ids(con, uid)
+        rows = con.execute("SELECT * FROM announcements WHERE school_id=? AND (class_id IS NULL OR class_id IN (%s)) ORDER BY id DESC LIMIT 100"
+                           % (",".join("?" * len(ids)) or "NULL"), [me["school_id"]] + ids).fetchall()
+    else:
+        rows = con.execute("SELECT * FROM announcements WHERE school_id=? AND (class_id IS NULL OR class_id=?) ORDER BY id DESC LIMIT 100",
+                           (me["school_id"], me["class_id"])).fetchall()
+    items = []
+    for r in rows:
+        item = {"id": r["id"], "title": r["title"], "body": r["body"] or "", "priority": r["priority"], "createdAt": r["created_at"],
+                "author": (user_row(con, r["author_id"]) or {"name": ""})["name"] if r["author_id"] else "",
+                "classId": r["class_id"], "className": class_name(con, r["class_id"]) if r["class_id"] else None,
+                "subjectName": subj_name(r["subject"]) if r["subject"] else None,
+                "canDelete": me["role"] == "admin" or r["author_id"] == uid}
+        if me["role"] == "student":
+            item["read"] = bool(con.execute("SELECT 1 FROM announcement_reads WHERE announcement_id=? AND student_id=?", (r["id"], uid)).fetchone())
+        elif item["canDelete"]:
+            item["seen"] = con.execute("SELECT COUNT(*) n FROM announcement_reads WHERE announcement_id=?", (r["id"],)).fetchone()["n"]
+            item["total"] = len(audience(con, r["school_id"], r["class_id"]))
+        items.append(item)
+    out = {"items": items}
+    if me["role"] == "teacher":
+        out["targets"] = [{"id": c, "name": class_name(con, c),
+                           "subjects": [{"id": s, "label": subj_name(s)} for s in teacher_subjects(con, uid, c)]}
+                          for c in announcement_class_ids(con, uid)]
+    return out
 
 def teacher_class_ids(con, uid):
     return [r["class_id"] for r in con.execute("SELECT DISTINCT class_id FROM timetable WHERE teacher_id=?", (uid,)).fetchall()]
@@ -760,13 +851,15 @@ def build_student(con, uid):
                          if ISO_RE.match(v["d"]) and v["d"] >= cutoff),
                         key=lambda g: (g["d"], g["id"]), reverse=True)
     label = "%s, %d %s" % (FULLDAYS[wd], t.day, MONTHS[t.month])
+    recent = iso(t - timedelta(days=3))
+    recent_announcements = [a for a in build_announcements(con, u)["items"] if a["createdAt"] >= recent][:3]
     return {
         "student": {"id": uid, "name": u["name"], "class": cls, "classId": cid,
                     "school": school_name(con, u["school_id"])},
         "subjects": {c: {"name": n, "hue": hue, "short": s} for c, (n, hue, s) in SUBJECTS.items()},
         "typeLabel": TYPE_LABEL,
         "today": {"weekdayIdx": idx, "isWeekend": is_weekend, "dateLabel": label,
-                  "classes": classes_today, "pack": pack, "due": due + due_tasks, "newGrades": new_grades},
+                  "classes": classes_today, "announcements": recent_announcements, "pack": pack, "due": due + due_tasks, "newGrades": new_grades},
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
         "tasks": tasks,
         "grades": grades, "absences": absences,
@@ -953,6 +1046,10 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/student":
             need(me, "student")
             return build_student(con, me["id"])
+        if p == "/api/announcements":
+            if me["role"] == "admin":
+                return build_announcements(con, me, int(q["schoolId"][0]))
+            return build_announcements(con, me)
         if p == "/api/notifications":
             need(me, "student")
             return build_notifications(con, me["id"], me["class_id"])
@@ -990,6 +1087,8 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/api/schools/(\d+)$", p)
         if m and method == "DELETE":
             sid = int(m.group(1))
+            for a in con.execute("SELECT id FROM announcements WHERE school_id=?", (sid,)).fetchall():
+                delete_announcement(con, a["id"])
             cids = [r["id"] for r in con.execute("SELECT id FROM classes WHERE school_id=?", (sid,)).fetchall()]
             for cid in cids:
                 con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
@@ -1008,6 +1107,8 @@ class Handler(BaseHTTPRequestHandler):
         if m and method == "DELETE":
             cid = int(m.group(1))
             con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
+            for a in con.execute("SELECT id FROM announcements WHERE class_id=?", (cid,)).fetchall():
+                delete_announcement(con, a["id"])
             for a in con.execute("SELECT id FROM assessments WHERE class_id=?", (cid,)).fetchall():
                 drop_notifications(con, "assessment:%d" % a["id"], "reminder:%d" % a["id"])
             con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
@@ -1068,6 +1169,24 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/api/timetable/(\d+)$", p)
         if m and method == "DELETE":
             con.execute("DELETE FROM timetable WHERE id=?", (int(m.group(1)),))
+            return {"ok": True}
+
+        # ---------- announcements ----------
+        if p == "/api/announcements" and method == "POST":
+            need(me, "teacher", "admin")
+            return post_announcement(con, me, body, now)
+        if p == "/api/announcements/read" and method == "POST":
+            need(me, "student")
+            for a in build_announcements(con, me)["items"]:
+                con.execute("INSERT OR IGNORE INTO announcement_reads(announcement_id,student_id,read_at) VALUES(?,?,?)", (a["id"], me["id"], now))
+            return {"ok": True}
+        m = re.match(r"^/api/announcements/(\d+)$", p)
+        if m and method == "DELETE":
+            need(me, "teacher", "admin")
+            r = con.execute("SELECT * FROM announcements WHERE id=?", (int(m.group(1)),)).fetchone()
+            if not r or (me["role"] != "admin" and r["author_id"] != me["id"]):
+                raise HttpError(404, "not found")
+            delete_announcement(con, r["id"])
             return {"ok": True}
 
         # ---------- teacher: assessments ----------
@@ -1185,7 +1304,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
-            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "classes", "schools"]:
+            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
             return {"ok": True}
 

@@ -56,6 +56,7 @@ and nothing else — you build the rest.
 ### Admin
 - Add / delete **schools**.
 - Per school: add / delete **classes** (and set each class's **diriginte**), **teachers** (with subjects), **students** (assigned to a class).
+- Post **announcements** to the whole school or to one class.
 - Build the **timetable** per class (place/replace/remove any slot: subject, teacher, room, start and end time).
 - Starts empty — nothing is seeded except the admin account.
 
@@ -63,10 +64,12 @@ and nothing else — you build the rest.
 - **Orarul meu** — weekly schedule showing only the lessons they teach (class, subject, room, time; today highlighted).
 - **Catalog** — per class + subject they teach: student list with grades, average and absences; add/edit/delete their own grades and absences; **Prezența de azi** roll call for today's lesson; **Motivări** for the diriginte.
 - **Încărcare** — per-class workload heatmap + collision detector; schedule assessments with calmest-day suggestions.
+- **Anunțuri** — post to a class they teach or are diriginte of, optionally for one subject, with a priority; see how many pupils have read it.
 
 ### Student
 - **Azi** — morning brief: today's lessons, what to pack, what's due (tick tasks done), and new grades from the last 3 days.
 - **Orar** — their class timetable with assessment markers.
+- **Anunțuri** — feed for their class and school; recent ones also appear on Azi.
 - **Notificări** — new or changed grades, absences (and when they're excused), announced tests and assignments, plus a reminder when one is due today or tomorrow; a badge counts the unread ones.
 - **Catalog** — read-only grades (date, note and teacher on tap/hover, averages, "what do I need?" calculator) and absences.
 
@@ -93,6 +96,7 @@ schoolpilot/
 | GET | `/api/student?userId=` | student |
 | PATCH/DELETE | `/api/tasks/:id` | student |
 | GET | `/api/notifications` · POST `/api/notifications/read` | student |
+| GET · POST · DELETE `/:id` | `/api/announcements` (POST `/read`: student) | all read; teacher and admin post |
 | POST | `/api/grades/what-if` | student |
 | GET | `/api/teacher/catalog?classId=&subject=` · `/api/teacher/motivari` | teacher |
 | POST · PATCH/DELETE `/:id` | `/api/grades`, `/api/absences` | teacher (own entries; diriginte can excuse) |
