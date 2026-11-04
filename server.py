@@ -85,6 +85,9 @@ SUBJECTS = {
 }
 PERIODS = ["%02d:00" % h for h in range(8, 22)]  # one slot per entry; a day holds at most this many
 LESSON_MINUTES = 50
+# OMEC 3194/2026. Modules 3 and 4 vary by county; this is the earliest variant, and the admin can change any date.
+DEFAULT_MODULES = [(1, "2026-09-07", "2026-10-23"), (2, "2026-11-02", "2026-12-22"), (3, "2027-01-11", "2027-02-12"),
+                   (4, "2027-02-22", "2027-04-23"), (5, "2027-05-05", "2027-06-18")]
 PRIORITIES = ("urgent", "normal", "info")
 EVENING_HOUR = 15  # from this hour the student's Azi page also shows the next school day
 RISK_AVERAGE = 6
@@ -140,6 +143,10 @@ CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   day INTEGER NOT NULL, period INTEGER NOT NULL,
   subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
+);
+CREATE TABLE IF NOT EXISTS school_modules (
+  school_id INTEGER NOT NULL, number INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+  PRIMARY KEY (school_id, number)
 );
 CREATE TABLE IF NOT EXISTS announcements (
   id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, class_id INTEGER, subject TEXT,
@@ -409,6 +416,48 @@ def add_due_reminders(con, uid, class_id):
         notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
                subj_name(a["subject"]), ref)
 
+def school_modules(con, school_id):
+    rows = con.execute("SELECT * FROM school_modules WHERE school_id=? ORDER BY number", (school_id,)).fetchall()
+    return [{"number": r["number"], "start": r["start"], "end": r["end"]} for r in rows] or \
+        [{"number": n, "start": a, "end": b} for n, a, b in DEFAULT_MODULES]
+
+def module_of(modules, day):
+    """Number of the module a date falls in, or None for a holiday."""
+    for m in modules:
+        if m["start"] <= day <= m["end"]:
+            return m["number"]
+    return None
+
+def module_status(modules, day):
+    number = module_of(modules, day)
+    if number:
+        return {"number": number, "label": "Modulul %d" % number, "holiday": False}
+    following = [m for m in modules if m["start"] > day]
+    return {"number": None, "label": "Vacanță", "holiday": True,
+            "resumes": date_text(following[0]["start"]) if following else None}
+
+def save_modules(con, school_id, modules):
+    rows = []
+    for number, m in enumerate(modules, 1):
+        try:
+            start, end = iso(parse_iso(m["start"])), iso(parse_iso(m["end"]))
+        except (KeyError, TypeError, ValueError):
+            raise HttpError(400, "Modulul %d are o dată greșită." % number)
+        if end < start:
+            raise HttpError(400, "Modulul %d se termină înainte să înceapă." % number)
+        if rows and start <= rows[-1][2]:
+            raise HttpError(400, "Modulul %d începe înainte să se termine modulul %d." % (number, number - 1))
+        rows.append((number, start, end))
+    if len(rows) != 5:
+        raise HttpError(400, "Anul școlar are 5 module.")
+    con.execute("DELETE FROM school_modules WHERE school_id=?", (school_id,))
+    con.executemany("INSERT INTO school_modules(school_id,number,start,end) VALUES(?,?,?,?)",
+                    [(school_id, n, a, b) for n, a, b in rows])
+
+def annual_average(values):
+    """Whole-number annual average: x.50 rounds up, in integer maths."""
+    return (2 * sum(values) + len(values)) // (2 * len(values))
+
 def subject_average(con, student_id, subject):
     v = con.execute("SELECT AVG(value) a FROM grades WHERE student_id=? AND subject=?", (student_id, subject)).fetchone()["a"]
     return round(v, 2) if v is not None else None
@@ -639,7 +688,7 @@ def build_admin(con):
                      "className": class_name(con, u["class_id"]), "email": u["email"], "hasLogin": bool(u["auth_id"])}
                     for u in con.execute("SELECT * FROM users WHERE role='student' AND school_id=? ORDER BY name", (sid,)).fetchall()]
         schools.append({"id": sid, "name": s["name"], "classes": classes,
-                        "teachers": teachers, "students": students})
+                        "teachers": teachers, "students": students, "modules": school_modules(con, sid)})
     return {"schools": schools, "subjects": subjects_catalog(), "periods": PERIODS}
 
 def slot_time(r):
@@ -755,9 +804,11 @@ def build_teacher(con, uid):
 def build_catalog(con, me, class_id, subject):
     uid = me["id"]
     wd = today().weekday()
+    modules = school_modules(con, user_row(con, uid)["school_id"])
+    in_module = module_of(modules, iso(today()))
     lessons = sorted(slot_time(r) for r in con.execute(
         "SELECT period,time FROM timetable WHERE class_id=? AND subject=? AND teacher_id=? AND day=?",
-        (class_id, subject, uid, wd)).fetchall()) if wd <= 4 else []
+        (class_id, subject, uid, wd)).fetchall()) if wd <= 4 and in_module else []
     cls = con.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
     students = []
     for s in con.execute("SELECT * FROM users WHERE role='student' AND class_id=? ORDER BY name", (class_id,)).fetchall():
@@ -766,14 +817,15 @@ def build_catalog(con, me, class_id, subject):
         students.append({
             "id": s["id"], "name": s["name"],
             "avg": round(sum(g["value"] for g in grades) / len(grades), 2) if grades else None,
-            "grades": [{"id": g["id"], "v": g["value"], "d": g["date"], "note": g["note"],
+            "grades": [{"id": g["id"], "v": g["value"], "d": g["date"], "note": g["note"], "module": module_of(modules, g["date"]),
                         "teacher": teacher_name(con, g["teacher_id"]), "mine": g["teacher_id"] == uid} for g in grades],
             "absences": [{"id": a["id"], "d": a["date"], "excused": a["kind"] == "excused",
                           "teacher": teacher_name(con, a["teacher_id"]), "mine": a["teacher_id"] == uid} for a in absences],
         })
     return {"classId": class_id, "className": cls["name"], "subject": subject, "subjectName": subj_name(subject),
             "today": iso(today()), "lessonToday": lessons[0] if lessons else None,
-            "isHomeroom": cls["homeroom_teacher_id"] == uid, "students": students}
+            "isHomeroom": cls["homeroom_teacher_id"] == uid, "students": students,
+            "modules": [m["number"] for m in modules], "currentModule": in_module}
 
 def build_motivari(con, uid):
     out = []
@@ -796,11 +848,14 @@ def pack_list(lessons, last_item):
             pack.append(rule)
     return pack + [last_item] if lessons else pack
 
-def next_day_brief(tt, weekday, hour):
+def next_day_brief(tt, modules, hour):
     """In the evening: the next school day's lessons and what to pack for them."""
     if hour < EVENING_HOUR:
         return None
+    weekday = today().weekday()
     idx = weekday + 1 if weekday < 4 else 0
+    if not module_of(modules, iso(today() + timedelta(days=(idx - weekday) % 7))):
+        return None
     lessons = sorted((c for c in tt[idx] if c), key=lambda c: c["time"])
     if not lessons:
         return None
@@ -833,8 +888,10 @@ def build_student(con, uid):
     idx = wd if not is_weekend else 0
     now = datetime.now()
     now_min = now.hour * 60 + now.minute
+    modules = school_modules(con, u["school_id"])
+    module = module_status(modules, iso(today()))
     classes_today = sorted(({**cell, "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
-                            for cell in tt[idx] if cell), key=lambda c: c["time"])
+                            for cell in tt[idx] if cell and not module["holiday"]), key=lambda c: c["time"])
     pack = pack_list(classes_today, "Caietele de azi")
     # assessments for the class
     assess = con.execute("SELECT * FROM assessments WHERE class_id=? ORDER BY date", (cid,)).fetchall() if cid else []
@@ -903,7 +960,7 @@ def build_student(con, uid):
         "typeLabel": TYPE_LABEL,
         "today": {"weekdayIdx": idx, "isWeekend": is_weekend, "dateLabel": label,
                   "classes": classes_today, "announcements": recent_announcements, "pack": pack,
-                  "nextDay": next_day_brief(tt, wd, now.hour),
+                  "nextDay": next_day_brief(tt, modules, now.hour), "module": module,
                   "forecast": stress_forecast(workload["collisions"], grades["subjects"]) if workload else None,
                   "due": due + due_tasks, "newGrades": new_grades},
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
@@ -916,6 +973,7 @@ def build_student(con, uid):
 
 def build_grades(con, student_id):
     rows = con.execute("SELECT * FROM grades WHERE student_id=? ORDER BY date, id", (student_id,)).fetchall()
+    modules = school_modules(con, user_row(con, student_id)["school_id"])
     bysub = {}
     for r in rows:
         bysub.setdefault(r["subject"], []).append(r)
@@ -924,14 +982,14 @@ def build_grades(con, student_id):
         vals = [r["value"] for r in lst]
         avg = round(sum(vals) / len(vals), 2)
         subs.append({"code": code, "name": subj_name(code), "hue": subj_hue(code), "short": subj_short(code),
-                     "avg": avg, "risk": avg < RISK_AVERAGE,
-                     "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"],
+                     "avg": avg, "annual": annual_average(vals), "risk": avg < RISK_AVERAGE,
+                     "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"], "module": module_of(modules, r["date"]),
                                  "teacher": teacher_name(con, r["teacher_id"])} for r in lst]})
     subs.sort(key=lambda s: s["name"])
-    overall = round(sum(s["avg"] for s in subs) / len(subs), 2) if subs else 0
+    overall = round(sum(s["annual"] for s in subs) / len(subs), 2) if subs else 0  # mean of the rounded annual averages
     best = max(subs, key=lambda s: s["avg"]) if subs else None
     worst = min(subs, key=lambda s: s["avg"]) if subs else None
-    return {"overall": overall, "subjects": subs,
+    return {"overall": overall, "subjects": subs, "modules": [m["number"] for m in modules],
             "best": {"short": best["short"], "avg": best["avg"]} if best else None,
             "worst": {"short": worst["short"], "avg": worst["avg"]} if worst else None}
 
@@ -1131,9 +1189,14 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("name required")
             cur = con.execute("INSERT INTO schools(name,created_at) VALUES(?,?)", (name, now))
             return {"id": cur.lastrowid}
+        m = re.match(r"^/api/schools/(\d+)/modules$", p)
+        if m and method == "POST":
+            save_modules(con, int(m.group(1)), body.get("modules") or [])
+            return {"ok": True}
         m = re.match(r"^/api/schools/(\d+)$", p)
         if m and method == "DELETE":
             sid = int(m.group(1))
+            con.execute("DELETE FROM school_modules WHERE school_id=?", (sid,))
             for a in con.execute("SELECT id FROM announcements WHERE school_id=?", (sid,)).fetchall():
                 delete_announcement(con, a["id"])
             cids = [r["id"] for r in con.execute("SELECT id FROM classes WHERE school_id=?", (sid,)).fetchall()]
@@ -1355,7 +1418,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
-            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "classes", "schools"]:
+            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
             return {"ok": True}
 

@@ -26,6 +26,7 @@ Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called
 - Announcements: teachers post to a class from `announcement_class_ids()` (taught or diriginte), only the admin posts school-wide (`class_id` NULL). `announcement_reads` backs the "văzut de X din Y" count.
 - Student notifications are rows in `notifications`, written by `notify()` in the same route as the change. `ref` (`grade:12`, `absence:3`, `assessment:7`, `reminder:7`) links them to their source so deleting it removes them; `add_due_reminders()` creates reminders when the student's data is read, so there is no background job.
 - Shared UI in `index.html`: `toast.success/error/info` (every save, delete and API error), `await askConfirm({ title, body, action })` (never the browser `confirm()`), `SearchSelect` (pass `inline` inside sheets). They were adapted by hand from Watermelon UI; there is no shadcn CLI here.
+- The year has 5 modules per school (`school_modules`, else `DEFAULT_MODULES`, which the admin must renew each year). A grade's module comes from its date. Official averages stay annual: `annual_average()` rounds each subject and the general average is the mean of those. Outside a module students see no lessons, so `seed.py` shows an empty Azi during holidays.
 - Dates are stored as ISO `YYYY-MM-DD`; the frontend formats them with `fmtDate`.
 - Schema changes for existing databases go in `ADDED_COLUMNS` / `migrate()`, which run on every start and back up the DB to `<db>.pre-migration.db` the first time.
 

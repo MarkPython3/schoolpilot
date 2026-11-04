@@ -754,6 +754,29 @@ function AdminSchool({ a, school, tab, setTab, back, reload }) {
   );
 }
 
+function AdminModules({ school, reload }) {
+  const [rows, setRows] = useState(school.modules);
+  const [busy, setBusy] = useState(false);
+  const change = (i, key, v) => setRows((l) => l.map((m, j) => (j === i ? { ...m, [key]: v } : m)));
+  const save = () => {
+    setBusy(true);
+    API.post(`/api/schools/${school.id}/modules`, { modules: rows }).then(() => { toast.success('Modulele au fost salvate.'); return reload(); }).catch(toastError).finally(() => setBusy(false));
+  };
+  return (
+    <section className="mt-6 rounded-xl2 border border-line bg-white p-4 shadow-card">
+      <h2 className="font-display text-lg font-700">Anul școlar</h2>
+      <p className="mt-0.5 text-[13px] text-muted">Între module e vacanță: elevii nu văd ore. Modulele 3 și 4 diferă pe județ, așa că verifică datele inspectoratului.</p>
+      <div className="mt-3 space-y-3">{rows.map((m, i) => (
+        <div key={m.number} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[96px_1fr_1fr]">
+          <span className="col-span-2 text-[13px] font-700 sm:col-span-1 sm:pb-2.5">Modulul {m.number}</span>
+          <Field label="Început"><Input type="date" value={m.start} onChange={(e) => change(i, 'start', e.target.value)} /></Field>
+          <Field label="Sfârșit"><Input type="date" value={m.end} onChange={(e) => change(i, 'end', e.target.value)} /></Field>
+        </div>
+      ))}</div>
+      <ShimmerButton className="mt-4" disabled={busy} onClick={save}>Salvează modulele</ShimmerButton>
+    </section>
+  );
+}
 function AdminClasses({ school, reload }) {
   const [name, setName] = useState('');
   const add = () => { if (!name.trim()) return; API.post('/api/classes', { schoolId: school.id, name }).then(() => { setName(''); toast.success('Clasa a fost adăugată.'); return reload(); }).catch(toastError); };
@@ -783,6 +806,7 @@ function AdminClasses({ school, reload }) {
               </div>
             ))}
           </div>}
+      <AdminModules key={school.id} school={school} reload={reload} />
     </div>
   );
 }
@@ -1079,7 +1103,7 @@ function TeacherCatalog({ t }) {
             {!current && !err && <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
             {current && students.length === 0 && <Empty icon={<Icons.users size={26} />} title="Niciun elev" body="Clasa nu are încă elevi." />}
             {current && students.length > 0 && (mode === 'list'
-              ? <CatalogTable key={classId} students={students} onOpen={setOpenId} />
+              ? <CatalogTable key={classId} students={students} onOpen={setOpenId} modules={current.modules} />
               : <RollCall key={`${classId}-${subject}`} cat={current} students={students} reload={reloadAll} />)}
           </>}
       {t.homerooms.length > 0 && <Motivari tick={motivariTick} onChanged={reloadAll} />}
@@ -1102,7 +1126,12 @@ function Avg({ s }) { return <span className="font-display text-lg font-700 tnum
 function GradeList({ s }) { return s.grades.map((g) => <span key={g.id} className="grid h-7 w-7 place-items-center rounded-lg text-[13px] font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>); }
 function AbsenceTag({ s }) { return s.absences.length > 0 && <span className="whitespace-nowrap rounded-lg bg-heat-heavybg px-2 py-0.5 text-[12px] font-700 text-heat-heavy tnum">{absentaLabel(s.absences.length)}</span>; }
 // After Watermelon's sortable Data Table: a table from sm up, cards on phones.
-function CatalogTable({ students, onOpen }) {
+function CatalogTable({ students: all, onOpen, modules }) {
+  const [mod, setMod] = useState(0);
+  const students = mod === 0 ? all : all.map((s) => {
+    const grades = s.grades.filter((g) => g.module === mod);
+    return { ...s, grades, avg: grades.length ? grades.reduce((n, g) => n + g.v, 0) / grades.length : null };
+  });
   const [q, setQ] = useState('');
   const [sort, setSort] = useState({ col: 'name', dir: 'asc' });
   const needle = plainText(q.trim());
@@ -1118,6 +1147,7 @@ function CatalogTable({ students, onOpen }) {
   const ariaSort = (col) => (sort.col === col ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
   return (
     <div>
+      <PickChips label="Perioada" options={[{ id: 0, label: 'Tot anul' }, ...modules.map((n) => ({ id: n, label: `M${n}` }))]} value={mod} onChange={setMod} />
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 focus-within:border-brand">
           <Icons.search size={16} className="shrink-0 text-muted" />
@@ -1573,7 +1603,7 @@ function StudentToday({ s, reload, onGoto }) {
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand/40 blur-3xl" />
         <div className="pointer-events-none absolute right-24 top-12 h-28 w-28 rounded-full bg-brand/20 blur-2xl" />
         <div className="relative">
-          <p className="flex items-center gap-2 text-sm font-500 text-white/60"><Icons.sun size={16} /> {t.dateLabel} · {s.student.class}</p>
+          <p className="flex items-center gap-2 text-sm font-500 text-white/60"><Icons.sun size={16} /> {t.dateLabel} · {s.student.class} · {t.module.label}</p>
           <h1 className="mt-2 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight text-ink">{t.classes.length} ore</span>{t.due.length > 0 && <> și <span className="highlight text-ink">{t.due.length} de predat</span></>}.</h1>
           <p className="mt-2 max-w-xl text-[15px] text-white/70">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
           <div className="mt-5 flex flex-wrap items-center gap-3"><ShimmerButton icon={<Icons.grid size={18} />} onClick={() => onGoto('timetable')}>Vezi orarul</ShimmerButton></div>
@@ -1589,7 +1619,7 @@ function StudentToday({ s, reload, onGoto }) {
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <motion.section {...stagger(1)} className="lg:col-span-2 rounded-xl2 border border-line bg-white p-5 shadow-card">
           <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-700">Programul de azi</h2>{t.isWeekend && <Pill>weekend · previzualizare luni</Pill>}</div>
-          {t.classes.length === 0 ? <p className="rounded-xl bg-paper p-4 text-center text-[13px] text-muted">Nicio oră azi.</p>
+          {t.classes.length === 0 ? <p className="rounded-xl bg-paper p-4 text-center text-[13px] text-muted">{t.module.holiday ? (t.module.resumes ? `E vacanță. Cursurile reîncep pe ${t.module.resumes}.` : 'E vacanță.') : 'Nicio oră azi.'}</p>
             : <ol className="relative"><span className="absolute left-[62px] top-2 bottom-2 w-px bg-line" />
                 {t.classes.map((c, i) => (
                   <li key={i} className="relative flex items-stretch gap-4 py-1.5">
@@ -1704,7 +1734,13 @@ function StudentMarks({ s, reload }) {
 function GradesPanel({ s, reload }) {
   const g = s.grades;
   const [open, setOpen] = useState(null);
+  const [mod, setMod] = useState(0);
   const animOverall = useCountUp(g.overall);
+  const mean = (l) => l.reduce((n, x) => n + x.v, 0) / l.length;
+  const subjects = mod === 0 ? g.subjects : g.subjects.map((sub) => {
+    const values = sub.values.filter((v) => v.module === mod);
+    return values.length ? { ...sub, values, avg: mean(values), risk: mean(values) < 6 } : null;
+  }).filter(Boolean);
   return (
     <div>
       {g.subjects.length > 0 && (
@@ -1715,9 +1751,11 @@ function GradesPanel({ s, reload }) {
           {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
         </div>
       )}
+      {g.subjects.length > 0 && <PickChips label="Perioada" options={[{ id: 0, label: 'Tot anul' }, ...g.modules.map((n) => ({ id: n, label: `M${n}` }))]} value={mod} onChange={setMod} />}
       {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Notele apar aici când le introduc profesorii. SchoolPilot îți calculează mediile și de ce notă mai ai nevoie." />
+        : subjects.length === 0 ? <p className="rounded-xl2 border border-line bg-white p-6 text-center text-[13px] text-muted">Nicio notă în modulul {mod}.</p>
         : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {g.subjects.map((sub) => (
+            {subjects.map((sub) => (
               <motion.div key={sub.code} layout className={cx('rounded-xl2 border bg-white p-4 shadow-card', sub.risk ? 'border-heat-heavy/30' : 'border-line')}>
                 <button onClick={() => setOpen(open === sub.code ? null : sub.code)} className="w-full text-left">
                   <div className="flex items-center justify-between">
@@ -1725,6 +1763,7 @@ function GradesPanel({ s, reload }) {
                     <div className="flex items-center gap-3"><span className="font-display text-2xl font-700 tnum" style={{ color: sub.risk ? '#D92626' : '#12201E' }}>{sub.avg.toFixed(2)}</span><motion.span animate={{ rotate: open === sub.code ? 180 : 0 }}><Icons.chevD size={18} className="text-muted" /></motion.span></div>
                   </div>
                 </button>
+                <p className="mb-1 text-[12px] text-muted">{mod ? `Media notelor din modulul ${mod}, orientativă` : `Media anuală: ${sub.annual}`}</p>
                 <GradeChips values={sub.values} />
                 <GradeChart values={sub.values} hue={sub.hue} name={sub.name} />
                 <AnimatePresence>{open === sub.code && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden"><div className="mt-4 border-t border-line pt-4"><WhatINeed s={s} subject={sub.code} avg={sub.avg} reload={reload} /></div></motion.div>}</AnimatePresence>
