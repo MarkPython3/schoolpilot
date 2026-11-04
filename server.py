@@ -144,13 +144,21 @@ CREATE TABLE IF NOT EXISTS timetable (
   day INTEGER NOT NULL, period INTEGER NOT NULL,
   subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
 );
+CREATE TABLE IF NOT EXISTS lesson_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, timetable_id INTEGER NOT NULL, class_id INTEGER NOT NULL, date TEXT NOT NULL,
+  kind TEXT NOT NULL, teacher_id INTEGER, room TEXT, note TEXT, author_id INTEGER, created_at TEXT NOT NULL,
+  UNIQUE (timetable_id, date)
+);
+CREATE TABLE IF NOT EXISTS subject_goals (
+  student_id INTEGER NOT NULL, subject TEXT NOT NULL, target INTEGER NOT NULL, PRIMARY KEY (student_id, subject)
+);
 CREATE TABLE IF NOT EXISTS school_modules (
   school_id INTEGER NOT NULL, number INTEGER NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
   PRIMARY KEY (school_id, number)
 );
 CREATE TABLE IF NOT EXISTS announcements (
   id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, class_id INTEGER, subject TEXT,
-  author_id INTEGER, title TEXT NOT NULL, body TEXT, priority TEXT NOT NULL DEFAULT 'normal', created_at TEXT NOT NULL
+  author_id INTEGER, title TEXT NOT NULL, body TEXT, priority TEXT NOT NULL DEFAULT 'normal', created_at TEXT NOT NULL, link TEXT
 );
 CREATE TABLE IF NOT EXISTS announcement_reads (
   announcement_id INTEGER NOT NULL, student_id INTEGER NOT NULL, read_at TEXT NOT NULL,
@@ -188,7 +196,7 @@ ADDED_COLUMNS = [  # columns newer than the first databases
     ("classes", "homeroom_teacher_id", "INTEGER"),
     ("grades", "teacher_id", "INTEGER"), ("grades", "note", "TEXT"),
     ("absences", "teacher_id", "INTEGER"),
-    ("timetable", "time", "TEXT"), ("timetable", "end_time", "TEXT"),
+    ("timetable", "time", "TEXT"), ("timetable", "end_time", "TEXT"), ("announcements", "link", "TEXT"),
 ]
 
 def old_grade_date_to_iso(text, ref):
@@ -371,10 +379,10 @@ def remove_users(con, rows):
         if r["email"]:
             forget_email(r["email"])
         uid = r["id"]
-        for t in ("grades", "absences", "tasks", "notifications", "announcement_reads"):
+        for t in ("grades", "absences", "tasks", "notifications", "announcement_reads", "subject_goals"):
             con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
         con.execute("UPDATE announcements SET author_id=NULL WHERE author_id=?", (uid,))
-        for t in ("timetable", "assessments", "grades", "absences"):
+        for t in ("timetable", "assessments", "grades", "absences", "lesson_changes"):
             con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
         con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
         con.execute("DELETE FROM users WHERE id=?", (uid,))
@@ -415,6 +423,57 @@ def add_due_reminders(con, uid, class_id):
         what = TYPE_LABEL.get(a["type"], "Evaluare")
         notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
                subj_name(a["subject"]), ref)
+
+def change_label(r, con):
+    if r["kind"] == "cancelled":
+        return "Oră anulată"
+    if r["kind"] == "room":
+        return "Mutată în sala %s" % r["room"]
+    return "Suplinire: %s" % teacher_name(con, r["teacher_id"])
+
+def change_row(con, r):
+    slot = con.execute("SELECT * FROM timetable WHERE id=?", (r["timetable_id"],)).fetchone()
+    return {"id": r["id"], "timetableId": r["timetable_id"], "date": r["date"], "kind": r["kind"], "label": change_label(r, con), "note": r["note"] or "",
+            "subjectName": subj_name(slot["subject"]) if slot else "", "className": class_name(con, r["class_id"]),
+            "time": slot_time(slot) if slot else ""}
+
+def class_changes(con, class_id):
+    rows = con.execute("SELECT * FROM lesson_changes WHERE class_id=? AND date>=? ORDER BY date", (class_id, iso(today()))).fetchall()
+    return [change_row(con, r) for r in rows]
+
+def save_lesson_change(con, me, body, now):
+    need(me, "teacher")
+    slot = con.execute("SELECT * FROM timetable WHERE id=?", (int(body["timetableId"]),)).fetchone()
+    if not slot or slot["teacher_id"] != me["id"]:
+        raise HttpError(403, "Poți schimba doar orele tale.")
+    try:
+        day = parse_iso(body.get("date"))
+    except (TypeError, ValueError):
+        raise HttpError(400, "Data nu este validă.")
+    if day < today() or day.weekday() != slot["day"]:
+        raise HttpError(400, "Alege o dată viitoare, în ziua acestei ore.")
+    kind, room, substitute = body.get("kind"), (body.get("room") or "").strip()[:40], None
+    if kind == "room" and not room:
+        raise HttpError(400, "Scrie sala nouă.")
+    if kind == "substitute":
+        t = user_row(con, int(body.get("teacherId") or 0))
+        if not t or t["role"] != "teacher" or t["school_id"] != me["school_id"]:
+            raise HttpError(400, "Alege profesorul suplinitor.")
+        substitute = t["id"]
+    if kind not in ("cancelled", "room", "substitute"):
+        raise HttpError(400, "Alege tipul schimbării.")
+    old = con.execute("SELECT id FROM lesson_changes WHERE timetable_id=? AND date=?", (slot["id"], iso(day))).fetchone()
+    if old:
+        drop_notifications(con, "change:%d" % old["id"])
+        con.execute("DELETE FROM lesson_changes WHERE id=?", (old["id"],))
+    note = (body.get("note") or "").strip()[:200]
+    cur = con.execute("INSERT INTO lesson_changes(timetable_id,class_id,date,kind,teacher_id,room,note,author_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                      (slot["id"], slot["class_id"], iso(day), kind, substitute, room, note, me["id"], now))
+    r = con.execute("SELECT * FROM lesson_changes WHERE id=?", (cur.lastrowid,)).fetchone()
+    text = " · ".join(x for x in ("%s, %s" % (date_text(iso(day)), slot_time(slot)), note) if x)
+    for sid in audience(con, me["school_id"], slot["class_id"]):
+        notify(con, sid, "change", "%s: %s" % (subj_name(slot["subject"]), change_label(r, con)), text, "change:%d" % r["id"])
+    return {"id": r["id"]}
 
 def school_modules(con, school_id):
     rows = con.execute("SELECT * FROM school_modules WHERE school_id=? ORDER BY number", (school_id,)).fetchall()
@@ -501,6 +560,9 @@ def delete_announcement(con, announcement_id):
 def post_announcement(con, me, body, now):
     title, text = (body.get("title") or "").strip(), (body.get("body") or "").strip()
     priority, subject = body.get("priority", "normal"), body.get("subject") or None
+    link = (body.get("link") or "").strip() or None
+    if link and (len(link) > 500 or not re.match(r"^https?://\S+$", link)):
+        raise HttpError(400, "Linkul trebuie să înceapă cu http:// sau https://.")
     class_id = int(body["classId"]) if body.get("classId") else None
     if not title or len(title) > 120:
         raise HttpError(400, "Titlul este obligatoriu și are cel mult 120 de caractere.")
@@ -521,8 +583,8 @@ def post_announcement(con, me, body, now):
             raise HttpError(403, "Nu ai acces la această clasă.")
         if subject and subject not in teacher_subjects(con, me["id"], class_id):
             raise HttpError(403, "Nu predai această materie la clasa aleasă.")
-    cur = con.execute("INSERT INTO announcements(school_id,class_id,subject,author_id,title,body,priority,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                      (school_id, class_id, subject, me["id"], title, text, priority, now[:19]))
+    cur = con.execute("INSERT INTO announcements(school_id,class_id,subject,author_id,title,body,priority,created_at,link) VALUES(?,?,?,?,?,?,?,?,?)",
+                      (school_id, class_id, subject, me["id"], title, text, priority, now[:19], link))
     heading = "%s: %s" % ("Anunț urgent" if priority == "urgent" else "Anunț", title)
     target = class_name(con, class_id) if class_id else "Toată școala"
     for sid in audience(con, school_id, class_id):
@@ -542,7 +604,7 @@ def build_announcements(con, me, school_id=None):
                            (me["school_id"], me["class_id"])).fetchall()
     items = []
     for r in rows:
-        item = {"id": r["id"], "title": r["title"], "body": r["body"] or "", "priority": r["priority"], "createdAt": r["created_at"],
+        item = {"id": r["id"], "title": r["title"], "body": r["body"] or "", "link": r["link"], "priority": r["priority"], "createdAt": r["created_at"],
                 "author": (user_row(con, r["author_id"]) or {"name": ""})["name"] if r["author_id"] else "",
                 "classId": r["class_id"], "className": class_name(con, r["class_id"]) if r["class_id"] else None,
                 "subjectName": subj_name(r["subject"]) if r["subject"] else None,
@@ -782,7 +844,7 @@ def build_teacher(con, uid):
             class_ids.append(r["class_id"])
         if 0 <= r["day"] < 5:
             schedule[r["day"]].append({
-                "period": r["period"], "time": slot_time(r), "end": slot_end(r),
+                "id": r["id"], "day": r["day"], "period": r["period"], "time": slot_time(r), "end": slot_end(r),
                 "subject": r["subject"], "subjectName": subj_name(r["subject"]), "hue": subj_hue(r["subject"]),
                 "className": class_name(con, r["class_id"]), "classId": r["class_id"], "room": r["room"] or "",
             })
@@ -798,6 +860,10 @@ def build_teacher(con, uid):
         "classes": classes, "homerooms": homerooms, "schedule": schedule, "periods": PERIODS,
         "todayIdx": wd if wd <= 4 else None,
         "subjectCatalog": subjects_catalog(),
+        "colleagues": [{"id": c["id"], "name": c["name"]} for c in con.execute(
+            "SELECT id,name FROM users WHERE role='teacher' AND school_id=? AND id!=? ORDER BY name", (u["school_id"], uid)).fetchall()],
+        "changes": [{**change_row(con, r), "mine": r["author_id"] == uid} for r in con.execute(
+            "SELECT * FROM lesson_changes WHERE (author_id=? OR teacher_id=?) AND date>=? ORDER BY date", (uid, uid, iso(today()))).fetchall()],
     }
 
 # ---- teacher catalog: one class + subject ----
@@ -890,7 +956,9 @@ def build_student(con, uid):
     now_min = now.hour * 60 + now.minute
     modules = school_modules(con, u["school_id"])
     module = module_status(modules, iso(today()))
-    classes_today = sorted(({**cell, "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
+    changes = class_changes(con, cid) if cid else []
+    change_today = {c["timetableId"]: c for c in changes if c["date"] == iso(today())}
+    classes_today = sorted(({**cell, "change": change_today.get(cell["id"]), "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
                             for cell in tt[idx] if cell and not module["holiday"]), key=lambda c: c["time"])
     pack = pack_list(classes_today, "Caietele de azi")
     # assessments for the class
@@ -951,6 +1019,9 @@ def build_student(con, uid):
     upcoming = [{"id": a["id"], "date": a["date"], "subjectName": subj_name(a["subject"]), "hue": subj_hue(a["subject"]),
                  "type": a["type"], "typeLabel": TYPE_LABEL[a["type"]], "title": a["title"]}
                 for a in assess if a["date"] >= iso(t)]
+    excuse_due = [{"id": r["id"], "subjectName": subj_name(r["subject"]), "date": r["date"], "until": iso(parse_iso(r["date"]) + timedelta(days=7))}
+                  for r in con.execute("SELECT * FROM absences WHERE student_id=? AND kind='unexcused' AND date>=? ORDER BY date",
+                                       (uid, iso(t - timedelta(days=7)))).fetchall()]
     recent = iso(t - timedelta(days=3))
     recent_announcements = [a for a in build_announcements(con, u)["items"] if a["createdAt"] >= recent][:3]
     return {
@@ -960,7 +1031,7 @@ def build_student(con, uid):
         "typeLabel": TYPE_LABEL,
         "today": {"weekdayIdx": idx, "isWeekend": is_weekend, "dateLabel": label,
                   "classes": classes_today, "announcements": recent_announcements, "pack": pack,
-                  "nextDay": next_day_brief(tt, modules, now.hour), "module": module,
+                  "nextDay": next_day_brief(tt, modules, now.hour), "module": module, "changes": changes[:5], "excuseDue": excuse_due,
                   "forecast": stress_forecast(workload["collisions"], grades["subjects"]) if workload else None,
                   "due": due + due_tasks, "newGrades": new_grades},
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
@@ -985,6 +1056,12 @@ def build_grades(con, student_id):
                      "avg": avg, "annual": annual_average(vals), "risk": avg < RISK_AVERAGE,
                      "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"], "module": module_of(modules, r["date"]),
                                  "teacher": teacher_name(con, r["teacher_id"])} for r in lst]})
+    goals = {r["subject"]: r["target"] for r in con.execute("SELECT * FROM subject_goals WHERE student_id=?", (student_id,)).fetchall()}
+    for sub in subs:
+        target = goals.get(sub["code"])
+        if target:
+            sub["goal"] = {"target": target, "reached": sub["annual"] >= target,
+                           **what_if([v["v"] for v in sub["values"]], target, 1)}
     subs.sort(key=lambda s: s["name"])
     overall = round(sum(s["annual"] for s in subs) / len(subs), 2) if subs else 0  # mean of the rounded annual averages
     best = max(subs, key=lambda s: s["avg"]) if subs else None
@@ -1201,6 +1278,7 @@ class Handler(BaseHTTPRequestHandler):
                 delete_announcement(con, a["id"])
             cids = [r["id"] for r in con.execute("SELECT id FROM classes WHERE school_id=?", (sid,)).fetchall()]
             for cid in cids:
+                con.execute("DELETE FROM lesson_changes WHERE class_id=?", (cid,))
                 con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
                 con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
             remove_users(con, con.execute("SELECT * FROM users WHERE school_id=? AND role!='admin'", (sid,)).fetchall())
@@ -1219,6 +1297,7 @@ class Handler(BaseHTTPRequestHandler):
             con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
             for a in con.execute("SELECT id FROM announcements WHERE class_id=?", (cid,)).fetchall():
                 delete_announcement(con, a["id"])
+            con.execute("DELETE FROM lesson_changes WHERE class_id=?", (cid,))
             for a in con.execute("SELECT id FROM assessments WHERE class_id=?", (cid,)).fetchall():
                 drop_notifications(con, "assessment:%d" % a["id"], "reminder:%d" % a["id"])
             con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
@@ -1278,7 +1357,30 @@ class Handler(BaseHTTPRequestHandler):
             return {"id": cur.lastrowid}
         m = re.match(r"^/api/timetable/(\d+)$", p)
         if m and method == "DELETE":
+            con.execute("DELETE FROM lesson_changes WHERE timetable_id=?", (int(m.group(1)),))
             con.execute("DELETE FROM timetable WHERE id=?", (int(m.group(1)),))
+            return {"ok": True}
+
+        # ---------- last-minute lesson changes ----------
+        if p == "/api/lesson-changes" and method == "POST":
+            return save_lesson_change(con, me, body, now)
+        m = re.match(r"^/api/lesson-changes/(\d+)$", p)
+        if m and method == "DELETE":
+            need(me, "teacher")
+            if not con.execute("DELETE FROM lesson_changes WHERE id=? AND author_id=?", (int(m.group(1)), me["id"])).rowcount:
+                raise HttpError(404, "not found")
+            drop_notifications(con, "change:%s" % m.group(1))
+            return {"ok": True}
+
+        # ---------- student goals ----------
+        if p == "/api/goals" and method == "POST":
+            need(me, "student")
+            con.execute("DELETE FROM subject_goals WHERE student_id=? AND subject=?", (me["id"], body["subject"]))
+            if body.get("target"):
+                target = int(body["target"])
+                if not 2 <= target <= 10:
+                    raise HttpError(400, "Obiectivul este o notă de la 2 la 10.")
+                con.execute("INSERT INTO subject_goals(student_id,subject,target) VALUES(?,?,?)", (me["id"], body["subject"], target))
             return {"ok": True}
 
         # ---------- announcements ----------
@@ -1418,7 +1520,7 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
-            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "classes", "schools"]:
+            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "lesson_changes", "subject_goals", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
             return {"ok": True}
 

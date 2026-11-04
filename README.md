@@ -64,6 +64,7 @@ and nothing else — you build the rest.
 - **Orarul meu** — weekly schedule showing only the lessons they teach (class, subject, room, time; today highlighted).
 - **Catalog** — per class + subject they teach: student list with grades, average and absences; add/edit/delete their own grades and absences; **Prezența de azi** roll call for today's lesson; **Motivări** for the diriginte.
 - **Încărcare** — per-class workload heatmap + collision detector; schedule assessments with calmest-day suggestions.
+- **Schimbă** on a lesson — cancel it, move it or name a substitute for one date; the class is notified.
 - **Anunțuri** — post to a class they teach or are diriginte of, optionally for one subject, with a priority; see how many pupils have read it.
 
 ### Student

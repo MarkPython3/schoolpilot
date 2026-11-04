@@ -1025,7 +1025,7 @@ function TeacherApp({ account, onLogout }) {
     <Shell account={account} nav={nav} view={view} setView={setView} onLogout={onLogout}>
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
         {!t ? (err ? <LoadFailed err={err} retry={load} /> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>)
-          : view === 'schedule' ? <TeacherSchedule t={t} />
+          : view === 'schedule' ? <TeacherSchedule t={t} reload={load} />
           : view === 'catalog' ? <TeacherCatalog t={t} />
           : view === 'announcements' ? <Announcements canPost />
           : <TeacherWorkload t={t} />}
@@ -1033,11 +1033,54 @@ function TeacherApp({ account, onLogout }) {
     </Shell>
   );
 }
-function TeacherSchedule({ t }) {
+const nextDateFor = (dayIdx) => {
+  const d = new Date();
+  d.setDate(d.getDate() + ((dayIdx + 8 - d.getDay()) % 7)); // dayIdx 0 = Monday
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+function LessonChangeForm({ lesson, colleagues, onClose, onSaved }) {
+  const [date, setDate] = useState(nextDateFor(lesson.day));
+  const [kind, setKind] = useState('cancelled');
+  const [room, setRoom] = useState('');
+  const [teacherId, setTeacherId] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = () => {
+    setBusy(true);
+    API.post('/api/lesson-changes', { timetableId: lesson.id, date, kind, room, teacherId, note }).then(() => { toast.success('Elevii au fost anunțați.'); onSaved(); }).catch(toastError).finally(() => setBusy(false));
+  };
+  return (
+    <Modal>
+      <h3 id="lc-t" className="font-display text-xl font-700">Schimbă ora</h3>
+      <p className="text-sm text-muted">{lesson.subjectName} · {lesson.className} · {DAYS[lesson.day]}, {lesson.time}</p>
+      <div className="mt-4 space-y-4">
+        <PickChips label="Tip" options={[{ id: 'cancelled', label: 'Anulată' }, { id: 'room', label: 'Altă sală' }, { id: 'substitute', label: 'Suplinire' }]} value={kind} onChange={setKind} />
+        <Field label="Data"><Input type="date" value={date} min={todayISO()} step={7} onChange={(e) => setDate(e.target.value)} /></Field>
+        {kind === 'room' && <Field label="Sala nouă"><Input value={room} maxLength={40} onChange={(e) => setRoom(e.target.value)} placeholder="ex. A24" /></Field>}
+        {kind === 'substitute' && <div><span className="mb-1 block text-[12px] font-700 text-muted">Suplinitor</span>
+          <SearchSelect inline label="Suplinitor" value={teacherId} onChange={setTeacherId} placeholder="— alege profesor —" searchPlaceholder="Caută profesorul…" empty="Niciun profesor găsit." options={colleagues.map((c) => ({ value: String(c.id), label: c.name }))} /></div>}
+        <Field label="Observație (opțional)"><Input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} /></Field>
+      </div>
+      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" disabled={busy} onClick={save}>Anunță elevii</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Renunță</button></div>
+    </Modal>
+  );
+}
+function TeacherSchedule({ t, reload }) {
   const hasAny = t.schedule.some((d) => d.length);
+  const [changing, setChanging] = useState(null);
+  const undo = async (c) => {
+    if (!await askConfirm({ title: `Anulezi schimbarea din ${fmtDate(c.date)}?`, body: `${c.subjectName}, ${c.className}: ora revine la programul obișnuit.`, action: 'Anulează schimbarea' })) return;
+    API.del(`/api/lesson-changes/${c.id}`).then(() => { toast.success('Schimbarea a fost anulată.'); return reload(); }).catch(toastError);
+  };
   return (
     <div>
       <ViewHead title="Orarul meu" sub={t.classes.length ? `Orele tale la ${t.classes.map((c) => c.name).join(', ')}` : 'Doar orele tale'} icon={<Icons.grid />} />
+      {t.changes.length > 0 && <ul className="mb-4 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">{t.changes.map((c, i) => (
+        <li key={c.id} className={cx('flex items-center gap-3 p-3.5', i && 'border-t border-line')}>
+          <div className="min-w-0 flex-1"><p className="truncate text-sm font-700">{c.label}</p><p className="truncate text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time} · {c.subjectName} · {c.className}</p></div>
+          {c.mine && <button onClick={() => undo(c)} aria-label="Anulează schimbarea" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-heat-heavybg hover:text-heat-heavy"><Icons.trash size={16} /></button>}
+        </li>
+      ))}</ul>}
       {!hasAny ? <Empty icon={<Icons.grid size={26} />} title="Nu ai ore încă" body="Administratorul te pune în orar. Odată adăugat, vei vedea aici doar orele tale." />
         : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {DAYS.map((day, di) => (
@@ -1049,13 +1092,16 @@ function TeacherSchedule({ t }) {
                     <div key={i} className="rounded-xl border border-line p-2.5" style={{ borderLeft: `3px solid ${s.hue}` }}>
                       <div className="flex items-center justify-between"><span className="text-[12px] font-700 tnum text-muted">{s.time}–{s.end}</span><span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-700 text-brand-600">{s.className}</span></div>
                       <p className="mt-1 text-[13.5px] font-700 leading-tight">{s.subjectName}</p>
-                      <p className="text-[11.5px] text-muted">{s.room || '—'}</p>
+                      <div className="flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[11.5px] text-muted">{s.room || '—'}</p><button onClick={() => setChanging(s)} className="shrink-0 rounded-md px-1.5 py-1 text-[12px] font-700 text-brand-600 hover:bg-brand-50">Schimbă</button></div>
                     </div>
                   ))}
                 </div>
               </section>
             ))}
           </div>}
+      <Sheet open={!!changing} onClose={() => setChanging(null)} labelledBy="lc-t">
+        {changing && <LessonChangeForm lesson={changing} colleagues={t.colleagues} onClose={() => setChanging(null)} onSaved={() => { setChanging(null); reload(); }} />}
+      </Sheet>
     </div>
   );
 }
@@ -1477,6 +1523,7 @@ function AnnouncementCard({ a, onDelete }) {
         {a.canDelete && <button onClick={() => onDelete(a)} aria-label={`Șterge anunțul ${a.title}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-heat-heavybg hover:text-heat-heavy"><Icons.trash size={16} /></button>}
       </div>
       {a.body && <p className="mt-1.5 whitespace-pre-wrap break-words text-sm">{a.body}</p>}
+      {a.link && <a href={a.link} target="_blank" rel="noopener noreferrer" className="mt-1.5 block truncate text-sm font-700 text-brand-600 underline">{a.link}</a>}
       <p className="mt-2 text-[12px] text-muted">{a.author && `${a.author} · `}{stamp(a.createdAt)}{a.total !== undefined && ` · văzut de ${a.seen} din ${a.total}`}</p>
     </article>
   );
@@ -1488,6 +1535,7 @@ function AnnouncementForm({ school, targets, onClose, onSaved }) {
   const [priority, setPriority] = useState('normal');
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+  const [link, setLink] = useState('');
   const [dictateErr, setDictateErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const chosen = options.find((o) => o.id === target);
@@ -1496,7 +1544,7 @@ function AnnouncementForm({ school, targets, onClose, onSaved }) {
   const save = () => {
     if (!title.trim()) return toast.error('Scrie un titlu.');
     setBusy(true);
-    API.post('/api/announcements', { schoolId: school ? school.id : undefined, classId: target || null, subject: subject || null, priority, title, body: text })
+    API.post('/api/announcements', { schoolId: school ? school.id : undefined, classId: target || null, subject: subject || null, priority, title, body: text, link })
       .then(() => { toast.success('Anunțul a fost publicat.'); onSaved(); })
       .catch(toastError).finally(() => setBusy(false));
   };
@@ -1514,6 +1562,7 @@ function AnnouncementForm({ school, targets, onClose, onSaved }) {
           {dictateErr && <p role="alert" className="mt-1 text-[12px] text-heat-heavy">{dictateErr}</p>}
         </Field>
         <Field label="Text (opțional)"><textarea value={text} maxLength={2000} rows={4} onChange={(e) => setText(e.target.value)} placeholder="Detalii pentru elevi" className="w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand" /></Field>
+        <Field label="Link (opțional)"><Input type="url" value={link} maxLength={500} onChange={(e) => setLink(e.target.value)} placeholder="https://… fișă, PDF, formular" /></Field>
       </div>
       <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" disabled={busy} onClick={save}>{busy ? 'Se publică…' : 'Publică'}</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
     </Modal>
@@ -1555,6 +1604,7 @@ const NOTIFICATION_KINDS = {
   absence: { icon: Icons.calendar, tone: 'bg-heat-heavybg text-heat-heavy', view: 'marks' },
   excused: { icon: Icons.check, tone: 'bg-brand-50 text-brand-600', view: 'marks' },
   risk: { icon: Icons.alert, tone: 'bg-heat-heavybg text-heat-heavy', view: 'marks' },
+  change: { icon: Icons.clock, tone: 'bg-heat-busybg text-heat-busy', view: 'today' },
   announcement: { icon: Icons.megaphone, tone: 'bg-brand-50 text-brand-600', view: 'announcements' },
   assessment: { icon: Icons.book, tone: 'bg-paper text-ink', view: 'timetable' },
   reminder: { icon: Icons.alert, tone: 'bg-heat-heavybg text-heat-heavy', view: 'today' },
@@ -1626,7 +1676,7 @@ function StudentToday({ s, reload, onGoto }) {
                     <div className="w-12 shrink-0 pt-1 text-right tnum text-muted"><div className="text-[13px] font-600">{c.time}</div><div className="text-[11px]">{c.end}</div></div>
                     <div className="relative z-10 mt-1.5 grid place-items-center"><span className={cx('h-3 w-3 rounded-full ring-4 ring-white', c.current ? 'bg-brand' : 'bg-line')} /></div>
                     <div className={cx('flex min-w-0 flex-1 items-center justify-between rounded-xl px-3.5 py-2.5', c.current ? 'bg-brand-50 ring-1 ring-brand-100' : 'hover:bg-paper')}>
-                      <div className="min-w-0"><div className="flex items-center gap-2"><Dot hue={c.hue} /><span className="min-w-0 font-700 leading-tight">{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>{c.teacher && <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>}</div>
+                      <div className="min-w-0"><div className="flex items-center gap-2"><Dot hue={c.hue} /><span className={cx('min-w-0 font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>{c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}{c.teacher && <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>}</div>
                       <span className="ml-3 shrink-0 rounded-lg bg-white px-2 py-1 text-[12px] font-700 text-ink shadow-pill ring-1 ring-line">{c.room || '—'}</span>
                     </div>
                   </li>
@@ -1654,6 +1704,19 @@ function StudentToday({ s, reload, onGoto }) {
               </AnimatePresence>
             </ul>
           </motion.section>
+          {t.changes.length > 0 && (
+            <motion.section {...stagger(2)} className="rounded-xl2 border border-heat-busy/30 bg-white p-5 shadow-card">
+              <h2 className="mb-2 font-display text-lg font-700">Schimbări în orar</h2>
+              <ul className="space-y-2">{t.changes.map((c) => <li key={c.id} className="min-w-0"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
+            </motion.section>
+          )}
+          {t.excuseDue.length > 0 && (
+            <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
+              <h2 className="font-display text-lg font-700">Adu scutirea</h2>
+              <p className="mb-2 text-[12.5px] text-muted">Absențe nemotivate recente. Verifică termenul cu dirigintele.</p>
+              <ul className="space-y-1.5">{t.excuseDue.map((a) => <li key={a.id} className="text-sm"><b className="font-700">{a.subjectName}</b>, {fmtDate(a.date)}: până pe {fmtDate(a.until)}</li>)}</ul>
+            </motion.section>
+          )}
           {t.nextDay && (
             <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
               <h2 className="font-display text-lg font-700">{t.nextDay.label}</h2>
@@ -1694,6 +1757,33 @@ function StudentToday({ s, reload, onGoto }) {
     </div>
   );
 }
+const STUDY_STEPS = ['Recitește notițele', 'Rezolvă exerciții', 'Fă un test de probă'];
+const dayBefore = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// Splits the days before a test or assignment into up to three steps, ending the day before.
+function studyPlan(date) {
+  const today = todayISO();
+  const free = [3, 2, 1].map((n) => dayBefore(date, n)).filter((d) => d >= today);
+  if (free.length === 0) return [{ date: today, step: 'Recapitulare rapidă' }];
+  return free.map((d, i) => ({ date: d, step: STUDY_STEPS[i + STUDY_STEPS.length - free.length] }));
+}
+function UpcomingItem({ u, first }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className={cx(!first && 'border-t border-line')}>
+      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center gap-3 p-3.5 text-left hover:bg-paper/60">
+        <span className="w-14 shrink-0 text-[13px] font-700 tnum text-muted">{fmtDate(u.date)}</span>
+        <Dot hue={u.hue} />
+        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-700">{u.title}</span><span className="block truncate text-[12.5px] text-muted">{u.subjectName} · {u.typeLabel}</span></span>
+        <Icons.chevD size={16} className={cx('shrink-0 text-muted transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <ol className="space-y-1 px-3.5 pb-3.5">{studyPlan(u.date).map((p) => <li key={p.date} className="flex gap-3 text-[13px]"><span className="w-14 shrink-0 font-700 tnum text-muted">{fmtDate(p.date)}</span><span>{p.step}</span></li>)}</ol>}
+    </li>
+  );
+}
 function StudentTimetable({ s }) {
   return (
     <div>
@@ -1704,13 +1794,7 @@ function StudentTimetable({ s }) {
         <section className="mt-6">
           <h2 className="mb-3 font-display text-lg font-700">Evaluări</h2>
           <Heatmap wl={s.workload} typeLabel={s.typeLabel} />
-          {s.upcoming.length > 0 && <ul className="mt-4 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">{s.upcoming.map((u, i) => (
-            <li key={u.id} className={cx('flex items-center gap-3 p-3.5', i && 'border-t border-line')}>
-              <span className="w-14 shrink-0 text-[13px] font-700 tnum text-muted">{fmtDate(u.date)}</span>
-              <Dot hue={u.hue} />
-              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-700">{u.title}</span><span className="block truncate text-[12.5px] text-muted">{u.subjectName} · {u.typeLabel}</span></span>
-            </li>
-          ))}</ul>}
+          {s.upcoming.length > 0 && <ul className="mt-4 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">{s.upcoming.map((u, i) => <UpcomingItem key={u.id} u={u} first={i === 0} />)}</ul>}
         </section>
       )}
     </div>
@@ -1764,12 +1848,28 @@ function GradesPanel({ s, reload }) {
                   </div>
                 </button>
                 <p className="mb-1 text-[12px] text-muted">{mod ? `Media notelor din modulul ${mod}, orientativă` : `Media anuală: ${sub.annual}`}</p>
+                <GoalRow sub={sub} reload={reload} />
                 <GradeChips values={sub.values} />
                 <GradeChart values={sub.values} hue={sub.hue} name={sub.name} />
                 <AnimatePresence>{open === sub.code && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden"><div className="mt-4 border-t border-line pt-4"><WhatINeed s={s} subject={sub.code} avg={sub.avg} reload={reload} /></div></motion.div>}</AnimatePresence>
               </motion.div>
             ))}
           </div>}
+    </div>
+  );
+}
+function GoalRow({ sub, reload }) {
+  const goal = sub.goal;
+  const change = (e) => API.post('/api/goals', { subject: sub.code, target: e.target.value ? Number(e.target.value) : null }).then(reload).catch(toastError);
+  const status = !goal ? null : goal.reached ? 'Atins' : !goal.reachable ? 'Greu de atins cu o singură notă' : `Îți trebuie cel puțin ${goal.need} la nota următoare`;
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
+      <label className="flex items-center gap-1.5 font-700 text-muted">Obiectiv
+        <select value={goal ? goal.target : ''} onChange={change} aria-label={`Obiectiv la ${sub.name}`} className="rounded-lg border border-line bg-white px-1.5 py-1 text-[12.5px] text-ink outline-none focus:border-brand">
+          <option value="">—</option>{[5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      {status && <span className={goal.reached ? 'font-700 text-heat-calm' : 'text-muted'}>{status}</span>}
     </div>
   );
 }

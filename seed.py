@@ -57,7 +57,7 @@ def wipe(con):
     if real:
         raise SystemExit("Refusing to wipe: %d accounts have a Supabase login. Delete them from the admin "
                          "panel first (that also removes them in Supabase)." % real)
-    for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "classes", "schools"]:
+    for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "lesson_changes", "subject_goals", "classes", "schools"]:
         con.execute("DELETE FROM %s" % t)
     con.execute("DELETE FROM users WHERE role!='admin'")
 
