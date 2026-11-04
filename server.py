@@ -83,7 +83,8 @@ SUBJECTS = {
     "dir":   ("Consiliere și orientare (Dirigenție)", "#0891B2", "Dirig"),
     "opt":   ("Opțional (CDEOȘ)", "#64748B", "Opț"),
 }
-PERIODS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"]
+PERIODS = ["%02d:00" % h for h in range(8, 22)]  # one slot per entry; a day holds at most this many
+LESSON_MINUTES = 50
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
 TYPE_LABEL = {"test": "Lucrare", "quiz": "Ascultare", "tema": "Temă"}
 DAYNAMES = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"]
@@ -135,7 +136,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   day INTEGER NOT NULL, period INTEGER NOT NULL,
-  subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT
+  subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
 );
 CREATE TABLE IF NOT EXISTS assessments (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
@@ -165,7 +166,7 @@ ADDED_COLUMNS = [  # columns newer than the first databases
     ("classes", "homeroom_teacher_id", "INTEGER"),
     ("grades", "teacher_id", "INTEGER"), ("grades", "note", "TEXT"),
     ("absences", "teacher_id", "INTEGER"),
-    ("timetable", "time", "TEXT"),
+    ("timetable", "time", "TEXT"), ("timetable", "end_time", "TEXT"),
 ]
 
 def old_grade_date_to_iso(text, ref):
@@ -490,10 +491,23 @@ def slot_time(r):
     """Start time of a timetable row: the one the admin set, else the period's default."""
     return r["time"] or (PERIODS[r["period"]] if 0 <= r["period"] < len(PERIODS) else "")
 
-def clean_time(value):
+def minutes(hhmm):
+    return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+def slot_end(r):
+    """End time of a timetable row: the one the admin set, else a standard lesson's length."""
+    if r["end_time"]:
+        return r["end_time"]
+    start = slot_time(r)
+    if not start:
+        return ""
+    total = (minutes(start) + LESSON_MINUTES) % 1440
+    return "%02d:%02d" % (total // 60, total % 60)
+
+def clean_time(value, what="de început"):
     value = (value or "").strip()
     if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", value):
-        raise HttpError(400, "Ora de început nu este validă.")
+        raise HttpError(400, "Ora %s nu este validă." % what)
     return value
 
 def build_timetable(con, class_id):
@@ -504,7 +518,7 @@ def build_timetable(con, class_id):
                 "id": r["id"], "subject": r["subject"], "subjectName": subj_name(r["subject"]),
                 "short": subj_short(r["subject"]), "hue": subj_hue(r["subject"]),
                 "teacherId": r["teacher_id"], "teacher": teacher_name(con, r["teacher_id"]),
-                "room": r["room"] or "", "time": slot_time(r),
+                "room": r["room"] or "", "time": slot_time(r), "end": slot_end(r),
             }
     return grid
 
@@ -564,7 +578,7 @@ def build_teacher(con, uid):
             class_ids.append(r["class_id"])
         if 0 <= r["day"] < 5:
             schedule[r["day"]].append({
-                "period": r["period"], "time": slot_time(r),
+                "period": r["period"], "time": slot_time(r), "end": slot_end(r),
                 "subject": r["subject"], "subjectName": subj_name(r["subject"]), "hue": subj_hue(r["subject"]),
                 "className": class_name(con, r["class_id"]), "classId": r["class_id"], "room": r["room"] or "",
             })
@@ -628,13 +642,8 @@ def build_student(con, uid):
     idx = wd if not is_weekend else 0
     now = datetime.now()
     now_min = now.hour * 60 + now.minute
-    classes_today = []
-    for cell in tt[idx]:
-        if not cell:
-            continue
-        start = int(cell["time"][:2]) * 60 + int(cell["time"][3:])
-        classes_today.append({**cell, "current": (not is_weekend) and start <= now_min < start + 60})
-    classes_today.sort(key=lambda c: c["time"])
+    classes_today = sorted(({**cell, "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
+                            for cell in tt[idx] if cell), key=lambda c: c["time"])
     pack, seen = [], set()
     for c in classes_today:
         rule = PACK_RULES.get(c["subject"])
@@ -988,10 +997,13 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- admin: timetable ----------
         if p == "/api/timetable" and method == "POST":
             cid = int(body["classId"]); day = int(body["day"]); period = int(body["period"])
-            start = clean_time(body.get("time")) if body.get("time") else None
+            start = clean_time(body.get("time"))
+            end = clean_time(body.get("end"), "de sfârșit")
+            if minutes(end) <= minutes(start):
+                raise HttpError(400, "Ora de sfârșit trebuie să fie după ora de început.")
             con.execute("DELETE FROM timetable WHERE class_id=? AND day=? AND period=?", (cid, day, period))
-            cur = con.execute("INSERT INTO timetable(class_id,day,period,subject,teacher_id,room,time) VALUES(?,?,?,?,?,?,?)",
-                              (cid, day, period, body["subject"], body.get("teacherId"), (body.get("room") or "").strip(), start))
+            cur = con.execute("INSERT INTO timetable(class_id,day,period,subject,teacher_id,room,time,end_time) VALUES(?,?,?,?,?,?,?,?)",
+                              (cid, day, period, body["subject"], body.get("teacherId"), (body.get("room") or "").strip(), start, end))
             return {"id": cur.lastrowid}
         m = re.match(r"^/api/timetable/(\d+)$", p)
         if m and method == "DELETE":

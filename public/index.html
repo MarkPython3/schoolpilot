@@ -136,6 +136,7 @@ const Icons = {
   calendar: (p) => <Ic {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Ic>,
   trash: (p) => <Ic {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Ic>,
   logout: (p) => <Ic {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Ic>,
+  mic: (p) => <Ic {...p}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8" /></Ic>,
   spark: (p) => <Ic {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></Ic>,
   pencil: (p) => <Ic {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></Ic>,
   key: (p) => <Ic {...p}><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14.5 8.5l2 2" /></Ic>,
@@ -156,13 +157,13 @@ function ShimmerButton({ children, className, icon, ...p }) {
     </button>
   );
 }
-function FluidTabs({ tabs, active, onChange, id }) {
+function FluidTabs({ tabs, active, onChange, id, fill }) {
   return (
-    <div className="relative inline-flex items-center gap-1 rounded-full border border-line bg-white/70 p-1 shadow-pill backdrop-blur">
+    <div className={cx('relative items-center gap-1 rounded-full border border-line bg-white/70 p-1 shadow-pill backdrop-blur', fill ? 'flex w-full sm:inline-flex sm:w-auto' : 'inline-flex')}>
       {tabs.map((t) => { const on = active === t.id; return (
-        <button key={t.id} onClick={() => onChange(t.id)} className={cx('relative rounded-full px-4 py-2 text-sm font-700 transition-colors', on ? 'text-ink' : 'text-muted hover:text-ink')}>
+        <button key={t.id} onClick={() => onChange(t.id)} className={cx('relative rounded-full py-2 text-sm font-700 transition-colors', fill ? 'min-w-0 flex-1 px-1.5 sm:flex-none sm:px-4' : 'px-4', on ? 'text-ink' : 'text-muted hover:text-ink')}>
           {on && <motion.span layoutId={`fluid-${id}`} transition={spring} className="absolute inset-0 rounded-full bg-brand-50 ring-1 ring-brand-100" />}
-          <span className="relative z-10 inline-flex items-center gap-1.5">{t.icon}{t.label}</span>
+          <span className="relative z-10 inline-flex items-center gap-1.5">{fill ? <span className="hidden sm:inline">{t.icon}</span> : t.icon}{t.label}</span>
         </button>
       ); })}
     </div>
@@ -316,31 +317,38 @@ function Heatmap({ wl, typeLabel }) {
 }
 
 /* ================= TIMETABLE grid (read-only, student) ================= */
+function addMinutes(hhmm, n) {
+  const total = (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5)) + n) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
 function TimetableGrid({ tt, onCell }) {
   const reduce = useReducedMotion();
+  // Each day is listed by start time; `period` only says which stored slot a cell uses.
+  const days = tt.days.map((day) => day.map((cell, period) => cell && { ...cell, period }).filter(Boolean).sort((x, y) => x.time.localeCompare(y.time) || x.period - y.period));
+  const rows = Math.min(tt.days[0].length, Math.max(7, ...days.map((d) => d.length + (onCell ? 1 : 0)))); // always room for a 7-lesson day
   return (
     <div className="overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card">
-      <div className="grid min-w-[760px] gap-2" style={{ gridTemplateColumns: '58px repeat(5, 1fr)' }}>
-        <div />
+      <div className="grid min-w-[700px] gap-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         {DAYS.map((d, i) => <div key={d} className={cx('rounded-lg px-2 py-2 text-center text-sm font-700', i === tt.todayIdx ? 'bg-brand text-white' : 'text-ink')}>{d}</div>)}
-        {tt.periods.map((time, pi) => (
-          <React.Fragment key={time}>
-            <div className="flex items-start justify-end pr-1 pt-2 text-[12px] font-600 tnum text-muted">{time}</div>
-            {tt.days.map((day, di) => {
-              const cell = day[pi];
-              if (!cell) return <button key={di} onClick={() => onCell && onCell(di, pi, null)} className={cx('rounded-lg border border-dashed border-line/70 min-h-[46px]', onCell && 'hover:border-brand hover:bg-brand-50/40')} />;
-              return (
-                <motion.button key={di} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (pi * 5 + di) * 0.01 }}
-                  onClick={() => onCell && onCell(di, pi, cell)}
-                  className={cx('group relative rounded-lg border p-2 text-left hover:shadow-pill', di === tt.todayIdx ? 'border-brand-100 bg-brand-50/50' : 'border-line bg-white hover:border-brand-100')} style={{ borderLeft: `3px solid ${cell.hue}` }}>
-                  <div className="truncate text-[13px] font-700 leading-tight">{cell.short}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-muted">{cell.time && cell.time !== time ? `${cell.time} · ` : ''}{cell.room || '—'}</div>
-                  {cell.assessment && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }} />}
-                </motion.button>
-              );
-            })}
-          </React.Fragment>
-        ))}
+        {Array.from({ length: rows }, (_, r) => r).map((r) => days.map((day, di) => {
+          const cell = day[r];
+          if (!cell) {
+            const free = tt.days[di].indexOf(null);
+            const last = day[day.length - 1];
+            if (!onCell || free < 0) return <div key={`${r}-${di}`} className="rounded-lg border border-dashed border-line/70 min-h-[46px]" />;
+            return <button key={`${r}-${di}`} onClick={() => onCell(di, free, null, last ? last.end : '08:00')} aria-label={`Adaugă în ${DAYS[di]}`} className="rounded-lg border border-dashed border-line/70 min-h-[46px] hover:border-brand hover:bg-brand-50/40" />;
+          }
+          return (
+            <motion.button key={`${r}-${di}`} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (r * 5 + di) * 0.01 }}
+              onClick={() => onCell && onCell(di, cell.period, cell)}
+              className={cx('group relative rounded-lg border p-2 text-left hover:shadow-pill', di === tt.todayIdx ? 'border-brand-100 bg-brand-50/50' : 'border-line bg-white hover:border-brand-100')} style={{ borderLeft: `3px solid ${cell.hue}` }}>
+              <div className="truncate text-[13px] font-700 leading-tight">{cell.short}</div>
+              <div className="mt-0.5 truncate text-[11px] tnum text-muted">{cell.time}–{cell.end}</div>
+              <div className="truncate text-[11px] text-muted">{cell.room || '—'}</div>
+              {cell.assessment && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }} />}
+            </motion.button>
+          );
+        }))}
       </div>
     </div>
   );
@@ -570,9 +578,9 @@ function AdminSchool({ a, school, tab, setTab, back, reload }) {
   return (
     <div>
       <button onClick={back} className="mb-3 inline-flex items-center gap-1 text-sm font-700 text-muted hover:text-ink"><Icons.chevL size={16} /> Toate școlile</button>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3">
         <ViewHead title={school.name} sub="Construiește structura școlii" bare />
-        <div className="overflow-x-auto no-scrollbar"><FluidTabs id="admin" active={tab} onChange={setTab} tabs={tabs} /></div>
+        <div><FluidTabs id="admin" active={tab} onChange={setTab} tabs={tabs} fill /></div>
       </div>
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .18 }}>
@@ -761,8 +769,8 @@ function AdminTimetable({ a, school, reload }) {
         <span className="text-[12px] font-700 text-muted">Clasa:</span>
         {school.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1 transition-colors', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
       </div>
-      <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi materia, profesorul, sala sau ora de început. Punct roșu = are o evaluare programată de profesor.</p>
-      {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell) => setEdit({ day, period, cell })} /> : err ? <LoadFailed err={err} retry={loadTT} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi o oră. Fiecare zi se ordonează singură după ora de început. Punct roșu = are o evaluare programată de profesor.</p>
+      {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell, start) => setEdit({ day, period, cell, start })} /> : err ? <LoadFailed err={err} retry={loadTT} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
       <Sheet open={!!edit} onClose={() => setEdit(null)} labelledBy="tt-e">
         {edit && <TimetableCellEditor a={a} school={school} classId={classId} edit={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); loadTT(); reload(); }} />}
       </Sheet>
@@ -775,19 +783,22 @@ function TimetableCellEditor({ a, school, classId, edit, onClose, onSaved }) {
   const [subject, setSubject] = useState(existing ? existing.subject : '');
   const [teacherId, setTeacherId] = useState(existing && existing.teacherId ? String(existing.teacherId) : '');
   const [room, setRoom] = useState(existing ? existing.room : '');
-  const [time, setTime] = useState(existing ? existing.time : a.periods[edit.period]);
+  const [time, setTime] = useState(existing ? existing.time : edit.start);
+  const [end, setEnd] = useState(existing ? existing.end : addMinutes(edit.start, 50));
+  const [endChosen, setEndChosen] = useState(!!existing); // until then, the end follows the start
   const [err, setErr] = useState(null);
+  const changeStart = (v) => { setTime(v); if (v && !endChosen) setEnd(addMinutes(v, 50)); };
   const save = () => {
     if (!subject) return setErr('Alege materia.');
-    if (!time) return setErr('Alege ora de început.');
-    API.post('/api/timetable', { classId, day: edit.day, period: edit.period, subject, teacherId: teacherId ? Number(teacherId) : null, room, time }).then(onSaved).catch((e) => setErr(errText(e)));
+    if (!time || !end) return setErr('Alege ora de început și ora de sfârșit.');
+    API.post('/api/timetable', { classId, day: edit.day, period: edit.period, subject, teacherId: teacherId ? Number(teacherId) : null, room, time, end }).then(onSaved).catch((e) => setErr(errText(e)));
   };
   const remove = () => { if (existing) API.del(`/api/timetable/${existing.id}`).then(onSaved); };
   // teachers that teach this subject first, then the rest
   const teachers = [...school.teachers].sort((x, y) => (y.subjects.includes(subject) ? 1 : 0) - (x.subjects.includes(subject) ? 1 : 0));
   return (
     <Modal>
-      <h3 id="tt-e" className="font-display text-xl font-700">{DAYS[edit.day]} · ora {edit.period + 1}</h3>
+      <h3 id="tt-e" className="font-display text-xl font-700">{DAYS[edit.day]}</h3>
       <div className="mt-4 space-y-4">
         <FormError>{err}</FormError>
         <Field label="Materie"><SubjectSelect subjects={a.subjects} value={subject} onChange={setSubject} /></Field>
@@ -795,7 +806,10 @@ function TimetableCellEditor({ a, school, classId, edit, onClose, onSaved }) {
           <option value="">— alege profesor —</option>
           {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}{subject && t.subjects.includes(subject) ? ' ✓' : ''}</option>)}
         </select></Field>
-        <Field label="Ora de început"><Input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Ora de început"><Input type="time" value={time} onChange={(e) => changeStart(e.target.value)} /></Field>
+          <Field label="Ora de sfârșit"><Input type="time" value={end} onChange={(e) => { setEnd(e.target.value); setEndChosen(true); }} /></Field>
+        </div>
         <Field label="Sala"><Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="ex. A24 / Lab F" /></Field>
       </div>
       <div className="mt-5 flex gap-2">
@@ -843,7 +857,7 @@ function TeacherSchedule({ t }) {
                   {t.schedule[di].length === 0 && <p className="text-[12.5px] text-muted">liber</p>}
                   {t.schedule[di].map((s, i) => (
                     <div key={i} className="rounded-xl border border-line p-2.5" style={{ borderLeft: `3px solid ${s.hue}` }}>
-                      <div className="flex items-center justify-between"><span className="text-[12px] font-700 tnum text-muted">{s.time}</span><span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-700 text-brand-600">{s.className}</span></div>
+                      <div className="flex items-center justify-between"><span className="text-[12px] font-700 tnum text-muted">{s.time}–{s.end}</span><span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-700 text-brand-600">{s.className}</span></div>
                       <p className="mt-1 text-[13.5px] font-700 leading-tight">{s.subjectName}</p>
                       <p className="text-[11.5px] text-muted">{s.room || '—'}</p>
                     </div>
@@ -1097,12 +1111,47 @@ function TeacherWorkload({ t }) {
     </div>
   );
 }
+const DICTATE_ERRORS = {
+  'not-allowed': 'Browserul nu are voie să folosească microfonul. Permite accesul din setările site-ului.',
+  'service-not-allowed': 'Browserul nu are voie să folosească microfonul. Permite accesul din setările site-ului.',
+  'audio-capture': 'Nu am găsit niciun microfon.',
+  'no-speech': 'Nu am auzit nimic. Încearcă din nou.',
+  network: 'Dictarea are nevoie de internet.',
+};
+// Speech-to-text in Romanian, through the browser's own speech service. Hidden where unsupported.
+function DictateButton({ onText, onError }) {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const [listening, setListening] = useState(false);
+  const active = useRef(null);
+  useEffect(() => () => { if (active.current) active.current.abort(); }, []);
+  if (!Recognition) return null;
+  const toggle = () => {
+    if (active.current) return active.current.stop();
+    const rec = new Recognition();
+    rec.lang = 'ro-RO';
+    rec.onresult = (e) => { const text = Array.from(e.results).map((r) => r[0].transcript).join(' ').trim(); if (text) onText(text); };
+    rec.onerror = (e) => { if (e.error !== 'aborted') onError(DICTATE_ERRORS[e.error] || 'Dictarea nu a funcționat. Încearcă din nou.'); };
+    rec.onend = () => { active.current = null; setListening(false); };
+    onError(null);
+    active.current = rec;
+    setListening(true);
+    rec.start();
+  };
+  return (
+    <button type="button" onClick={toggle} aria-pressed={listening} aria-label={listening ? 'Oprește dictarea' : 'Dictează titlul'} title={listening ? 'Oprește dictarea' : 'Dictează titlul'}
+      className={cx('grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border transition-colors', listening ? 'border-brand bg-brand text-white' : 'border-line bg-white text-muted hover:bg-paper hover:text-ink')}>
+      <Icons.mic size={18} />
+    </button>
+  );
+}
 function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) {
   const mySubs = t.subjectCatalog.filter((s) => t.teacher.subjects.includes(s.code));
   const [subject, setSubject] = useState(mySubs[0] ? mySubs[0].code : '');
   const [type, setType] = useState('test');
   const [dateISO, setDateISO] = useState('');
   const [title, setTitle] = useState('');
+  const [dictateErr, setDictateErr] = useState(null);
+  const addDictated = (text) => setTitle((v) => (v.trim() ? `${v.trim()} ${text}` : text.charAt(0).toUpperCase() + text.slice(1)));
   const save = () => { if (!subject || !dateISO) return; API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type] }).then(onSaved); };
   return (
     <Modal>
@@ -1117,7 +1166,10 @@ function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) 
           <div className="flex flex-wrap gap-1.5">{suggestions.map((d) => { const h = HEAT[d.heat.k]; return <button key={d.date} onClick={() => setDateISO(d.date)} className={cx('rounded-lg px-2.5 py-1.5 text-[13px] font-700 ring-1', dateISO === d.date ? 'ring-brand' : 'ring-transparent')} style={{ background: h.bg, color: h.fg }}>{d.dateLabel}</button>; })}</div>
         </div>}
         <Field label="Data"><Input type="date" value={dateISO} min={todayISO()} onChange={(e) => setDateISO(e.target.value)} /></Field>
-        <Field label="Titlu (opțional)"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex. Lucrare — funcții" /></Field>
+        <Field label="Titlu (opțional)">
+          <div className="flex items-center gap-2"><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex. Lucrare — funcții" /><DictateButton onText={addDictated} onError={setDictateErr} /></div>
+          {dictateErr && <p role="alert" className="mt-1 text-[12px] text-heat-heavy">{dictateErr}</p>}
+        </Field>
       </div>
       <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Programează</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
     </Modal>
@@ -1174,7 +1226,7 @@ function StudentToday({ s, reload, onGoto }) {
             : <ol className="relative"><span className="absolute left-[62px] top-2 bottom-2 w-px bg-line" />
                 {t.classes.map((c, i) => (
                   <li key={i} className="relative flex items-stretch gap-4 py-1.5">
-                    <div className="w-12 shrink-0 pt-1 text-right text-[13px] font-600 tnum text-muted">{c.time}</div>
+                    <div className="w-12 shrink-0 pt-1 text-right tnum text-muted"><div className="text-[13px] font-600">{c.time}</div><div className="text-[11px]">{c.end}</div></div>
                     <div className="relative z-10 mt-1.5 grid place-items-center"><span className={cx('h-3 w-3 rounded-full ring-4 ring-white', c.current ? 'bg-brand' : 'bg-line')} /></div>
                     <div className={cx('flex min-w-0 flex-1 items-center justify-between rounded-xl px-3.5 py-2.5', c.current ? 'bg-brand-50 ring-1 ring-brand-100' : 'hover:bg-paper')}>
                       <div className="min-w-0"><div className="flex items-center gap-2"><Dot hue={c.hue} /><span className="truncate font-700">{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>{c.teacher && <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>}</div>
