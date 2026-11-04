@@ -22,6 +22,7 @@ Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called
 - Frontend: `Root` boots supabase-js (vendored), shows `Login` → `ChangePassword` (when `mustChangePassword`) → `AdminApp` / `TeacherApp` / `StudentApp`, each wrapped in `Shell`. `jfetch` adds the bearer token and logs out on 401.
 - Subjects are a fixed catalogue (`SUBJECTS` in `server.py`, keyed by code such as `mate` or `fiz`). Assessment types `test`/`quiz`/`tema` have weights in `TYPE_W`; only `test` and `quiz` count as graded for collisions.
 - Grades and absences are entered only by teachers; students read them. `need_student_subject` checks the timetable (a teacher may act only on subjects they teach in that student's class), `owned_row` limits edit/delete to the teacher who entered the row, and an absence can be excused by its recorder or the class's diriginte (`classes.homeroom_teacher_id`, set by the admin).
+- Each timetable slot has a `period` (its row in the grid) and an optional `time` set by the admin; `slot_time()` falls back to `PERIODS[period]`.
 - Dates are stored as ISO `YYYY-MM-DD`; the frontend formats them with `fmtDate`.
 - Schema changes for existing databases go in `ADDED_COLUMNS` / `migrate()`, which run on every start and back up the DB to `<db>.pre-migration.db` the first time.
 

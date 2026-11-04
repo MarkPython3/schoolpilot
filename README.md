@@ -56,7 +56,7 @@ and nothing else — you build the rest.
 ### Admin
 - Add / delete **schools**.
 - Per school: add / delete **classes** (and set each class's **diriginte**), **teachers** (with subjects), **students** (assigned to a class).
-- Build the **timetable** per class (place/replace/remove any slot: subject, teacher, room).
+- Build the **timetable** per class (place/replace/remove any slot: subject, teacher, room, start time).
 - Starts empty — nothing is seeded except the admin account.
 
 ### Teacher

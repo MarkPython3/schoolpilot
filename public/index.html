@@ -334,7 +334,7 @@ function TimetableGrid({ tt, onCell }) {
                   onClick={() => onCell && onCell(di, pi, cell)}
                   className={cx('group relative rounded-lg border p-2 text-left hover:shadow-pill', di === tt.todayIdx ? 'border-brand-100 bg-brand-50/50' : 'border-line bg-white hover:border-brand-100')} style={{ borderLeft: `3px solid ${cell.hue}` }}>
                   <div className="truncate text-[13px] font-700 leading-tight">{cell.short}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-muted">{cell.room || '—'}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-muted">{cell.time && cell.time !== time ? `${cell.time} · ` : ''}{cell.room || '—'}</div>
                   {cell.assessment && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }} />}
                 </motion.button>
               );
@@ -761,7 +761,7 @@ function AdminTimetable({ a, school, reload }) {
         <span className="text-[12px] font-700 text-muted">Clasa:</span>
         {school.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1 transition-colors', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
       </div>
-      <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi ora. Punct roșu = are o evaluare programată de profesor.</p>
+      <p className="mb-3 text-[13px] text-muted">Atinge o celulă ca să pui / schimbi materia, profesorul, sala sau ora de început. Punct roșu = are o evaluare programată de profesor.</p>
       {grid ? <TimetableGrid tt={grid} onCell={(day, period, cell) => setEdit({ day, period, cell })} /> : err ? <LoadFailed err={err} retry={loadTT} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
       <Sheet open={!!edit} onClose={() => setEdit(null)} labelledBy="tt-e">
         {edit && <TimetableCellEditor a={a} school={school} classId={classId} edit={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); loadTT(); reload(); }} />}
@@ -775,20 +775,27 @@ function TimetableCellEditor({ a, school, classId, edit, onClose, onSaved }) {
   const [subject, setSubject] = useState(existing ? existing.subject : '');
   const [teacherId, setTeacherId] = useState(existing && existing.teacherId ? String(existing.teacherId) : '');
   const [room, setRoom] = useState(existing ? existing.room : '');
-  const save = () => { if (!subject) return; API.post('/api/timetable', { classId, day: edit.day, period: edit.period, subject, teacherId: teacherId ? Number(teacherId) : null, room }).then(onSaved); };
+  const [time, setTime] = useState(existing ? existing.time : a.periods[edit.period]);
+  const [err, setErr] = useState(null);
+  const save = () => {
+    if (!subject) return setErr('Alege materia.');
+    if (!time) return setErr('Alege ora de început.');
+    API.post('/api/timetable', { classId, day: edit.day, period: edit.period, subject, teacherId: teacherId ? Number(teacherId) : null, room, time }).then(onSaved).catch((e) => setErr(errText(e)));
+  };
   const remove = () => { if (existing) API.del(`/api/timetable/${existing.id}`).then(onSaved); };
   // teachers that teach this subject first, then the rest
   const teachers = [...school.teachers].sort((x, y) => (y.subjects.includes(subject) ? 1 : 0) - (x.subjects.includes(subject) ? 1 : 0));
   return (
     <Modal>
       <h3 id="tt-e" className="font-display text-xl font-700">{DAYS[edit.day]} · ora {edit.period + 1}</h3>
-      <p className="text-sm text-muted">{a.periods[edit.period]}</p>
       <div className="mt-4 space-y-4">
+        <FormError>{err}</FormError>
         <Field label="Materie"><SubjectSelect subjects={a.subjects} value={subject} onChange={setSubject} /></Field>
         <Field label="Profesor"><select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand">
           <option value="">— alege profesor —</option>
           {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}{subject && t.subjects.includes(subject) ? ' ✓' : ''}</option>)}
         </select></Field>
+        <Field label="Ora de început"><Input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></Field>
         <Field label="Sala"><Input value={room} onChange={(e) => setRoom(e.target.value)} placeholder="ex. A24 / Lab F" /></Field>
       </div>
       <div className="mt-5 flex gap-2">

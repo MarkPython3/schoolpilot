@@ -64,6 +64,24 @@ SUBJECTS = {
     "sport": ("Educație fizică", "#E8650E", "Sport"),
     "fra":   ("Limba franceză", "#BE185D", "Fra"),
     "art":   ("Educație plastică", "#DB7706", "Art"),
+    "muz":   ("Educație muzicală", "#C026D3", "Muz"),
+    "tic":   ("Tehnologia informației și a comunicațiilor (TIC)", "#475569", "TIC"),
+    "ger":   ("Limba germană", "#B45309", "Ger"),
+    "spa":   ("Limba spaniolă", "#DC2626", "Spa"),
+    "ita":   ("Limba italiană", "#059669", "Ita"),
+    "lat":   ("Limba latină", "#78716C", "Lat"),
+    "lit":   ("Literatură universală", "#E11D74", "Lit U"),
+    "rel":   ("Religie", "#854D0E", "Rel"),
+    "log":   ("Logică, argumentare și comunicare", "#4F46E5", "Logică"),
+    "psih":  ("Psihologie", "#9333EA", "Psih"),
+    "soc":   ("Sociologie", "#0284C7", "Soc"),
+    "econ":  ("Economie", "#15803D", "Econ"),
+    "edant": ("Educație antreprenorială", "#CA8A04", "Antrep"),
+    "fil":   ("Filosofie", "#6D28D9", "Fil"),
+    "edsoc": ("Educație socială", "#0F766E", "Ed Soc"),
+    "tehn":  ("Educație tehnologică", "#57534E", "Tehn"),
+    "dir":   ("Consiliere și orientare (Dirigenție)", "#0891B2", "Dirig"),
+    "opt":   ("Opțional (CDEOȘ)", "#64748B", "Opț"),
 }
 PERIODS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"]
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
@@ -72,7 +90,8 @@ DAYNAMES = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"]
 FULLDAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"]
 MONTHS = ["", "ian", "feb", "mar", "apr", "mai", "iun", "iul", "aug", "sep", "oct", "nov", "dec"]
 PACK_RULES = {"sport": "Echipament sport", "chim": "Halat de laborator",
-              "fiz": "Caiet de laborator", "info": "Laptop / cont", "art": "Trusă de desen"}
+              "fiz": "Caiet de laborator", "info": "Laptop / cont", "tic": "Laptop / cont",
+              "art": "Trusă de desen"}
 
 def today():
     return date.today()
@@ -116,7 +135,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS timetable (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   day INTEGER NOT NULL, period INTEGER NOT NULL,
-  subject TEXT NOT NULL, teacher_id INTEGER, room TEXT
+  subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT
 );
 CREATE TABLE IF NOT EXISTS assessments (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
@@ -146,6 +165,7 @@ ADDED_COLUMNS = [  # columns newer than the first databases
     ("classes", "homeroom_teacher_id", "INTEGER"),
     ("grades", "teacher_id", "INTEGER"), ("grades", "note", "TEXT"),
     ("absences", "teacher_id", "INTEGER"),
+    ("timetable", "time", "TEXT"),
 ]
 
 def old_grade_date_to_iso(text, ref):
@@ -466,6 +486,16 @@ def build_admin(con):
                         "teachers": teachers, "students": students})
     return {"schools": schools, "subjects": subjects_catalog(), "periods": PERIODS}
 
+def slot_time(r):
+    """Start time of a timetable row: the one the admin set, else the period's default."""
+    return r["time"] or (PERIODS[r["period"]] if 0 <= r["period"] < len(PERIODS) else "")
+
+def clean_time(value):
+    value = (value or "").strip()
+    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", value):
+        raise HttpError(400, "Ora de început nu este validă.")
+    return value
+
 def build_timetable(con, class_id):
     grid = [[None] * len(PERIODS) for _ in range(5)]
     for r in con.execute("SELECT * FROM timetable WHERE class_id=? ORDER BY day,period", (class_id,)).fetchall():
@@ -474,7 +504,7 @@ def build_timetable(con, class_id):
                 "id": r["id"], "subject": r["subject"], "subjectName": subj_name(r["subject"]),
                 "short": subj_short(r["subject"]), "hue": subj_hue(r["subject"]),
                 "teacherId": r["teacher_id"], "teacher": teacher_name(con, r["teacher_id"]),
-                "room": r["room"] or "",
+                "room": r["room"] or "", "time": slot_time(r),
             }
     return grid
 
@@ -534,12 +564,12 @@ def build_teacher(con, uid):
             class_ids.append(r["class_id"])
         if 0 <= r["day"] < 5:
             schedule[r["day"]].append({
-                "period": r["period"], "time": PERIODS[r["period"]] if r["period"] < len(PERIODS) else "",
+                "period": r["period"], "time": slot_time(r),
                 "subject": r["subject"], "subjectName": subj_name(r["subject"]), "hue": subj_hue(r["subject"]),
                 "className": class_name(con, r["class_id"]), "classId": r["class_id"], "room": r["room"] or "",
             })
     for d in schedule:
-        d.sort(key=lambda x: x["period"])
+        d.sort(key=lambda x: (x["time"], x["period"]))
     classes = [{"id": cid, "name": class_name(con, cid), "subjects": teacher_subjects(con, uid, cid)} for cid in class_ids]
     homerooms = [{"id": c["id"], "name": c["name"]}
                  for c in con.execute("SELECT * FROM classes WHERE homeroom_teacher_id=? ORDER BY name", (uid,)).fetchall()]
@@ -556,8 +586,9 @@ def build_teacher(con, uid):
 def build_catalog(con, me, class_id, subject):
     uid = me["id"]
     wd = today().weekday()
-    lessons = con.execute("SELECT period FROM timetable WHERE class_id=? AND subject=? AND teacher_id=? AND day=? ORDER BY period",
-                          (class_id, subject, uid, wd)).fetchall() if wd <= 4 else []
+    lessons = sorted(slot_time(r) for r in con.execute(
+        "SELECT period,time FROM timetable WHERE class_id=? AND subject=? AND teacher_id=? AND day=?",
+        (class_id, subject, uid, wd)).fetchall()) if wd <= 4 else []
     cls = con.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
     students = []
     for s in con.execute("SELECT * FROM users WHERE role='student' AND class_id=? ORDER BY name", (class_id,)).fetchall():
@@ -572,7 +603,7 @@ def build_catalog(con, me, class_id, subject):
                           "teacher": teacher_name(con, a["teacher_id"]), "mine": a["teacher_id"] == uid} for a in absences],
         })
     return {"classId": class_id, "className": cls["name"], "subject": subject, "subjectName": subj_name(subject),
-            "today": iso(today()), "lessonToday": PERIODS[lessons[0]["period"]] if lessons else None,
+            "today": iso(today()), "lessonToday": lessons[0] if lessons else None,
             "isHomeroom": cls["homeroom_teacher_id"] == uid, "students": students}
 
 def build_motivari(con, uid):
@@ -595,14 +626,15 @@ def build_student(con, uid):
     wd = today().weekday()
     is_weekend = wd > 4
     idx = wd if not is_weekend else 0
-    now_hour = datetime.now().hour
+    now = datetime.now()
+    now_min = now.hour * 60 + now.minute
     classes_today = []
-    for p, cell in enumerate(tt[idx]):
+    for cell in tt[idx]:
         if not cell:
             continue
-        ptime = PERIODS[p]
-        classes_today.append({**cell, "time": ptime,
-                              "current": (not is_weekend) and int(ptime.split(":")[0]) == now_hour})
+        start = int(cell["time"][:2]) * 60 + int(cell["time"][3:])
+        classes_today.append({**cell, "current": (not is_weekend) and start <= now_min < start + 60})
+    classes_today.sort(key=lambda c: c["time"])
     pack, seen = [], set()
     for c in classes_today:
         rule = PACK_RULES.get(c["subject"])
@@ -956,9 +988,10 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- admin: timetable ----------
         if p == "/api/timetable" and method == "POST":
             cid = int(body["classId"]); day = int(body["day"]); period = int(body["period"])
+            start = clean_time(body.get("time")) if body.get("time") else None
             con.execute("DELETE FROM timetable WHERE class_id=? AND day=? AND period=?", (cid, day, period))
-            cur = con.execute("INSERT INTO timetable(class_id,day,period,subject,teacher_id,room) VALUES(?,?,?,?,?,?)",
-                              (cid, day, period, body["subject"], body.get("teacherId"), (body.get("room") or "").strip()))
+            cur = con.execute("INSERT INTO timetable(class_id,day,period,subject,teacher_id,room,time) VALUES(?,?,?,?,?,?,?)",
+                              (cid, day, period, body["subject"], body.get("teacherId"), (body.get("room") or "").strip(), start))
             return {"id": cur.lastrowid}
         m = re.match(r"^/api/timetable/(\d+)$", p)
         if m and method == "DELETE":
