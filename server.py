@@ -86,6 +86,8 @@ SUBJECTS = {
 PERIODS = ["%02d:00" % h for h in range(8, 22)]  # one slot per entry; a day holds at most this many
 LESSON_MINUTES = 50
 PRIORITIES = ("urgent", "normal", "info")
+EVENING_HOUR = 15  # from this hour the student's Azi page also shows the next school day
+RISK_AVERAGE = 6
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
 TYPE_LABEL = {"test": "Lucrare", "quiz": "Ascultare", "tema": "Temă"}
 DAYNAMES = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"]
@@ -406,6 +408,16 @@ def add_due_reminders(con, uid, class_id):
         what = TYPE_LABEL.get(a["type"], "Evaluare")
         notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
                subj_name(a["subject"]), ref)
+
+def subject_average(con, student_id, subject):
+    v = con.execute("SELECT AVG(value) a FROM grades WHERE student_id=? AND subject=?", (student_id, subject)).fetchone()["a"]
+    return round(v, 2) if v is not None else None
+
+def alert_if_at_risk(con, student_id, subject, before, ref):
+    """Tell the student once, when their average drops below the risk line."""
+    after = subject_average(con, student_id, subject)
+    if after is not None and after < RISK_AVERAGE and (before is None or before >= RISK_AVERAGE):
+        notify(con, student_id, "risk", "Risc de corigență la %s" % subj_name(subject), "Media ta este acum %.2f." % after, ref)
 
 def unread_count(con, uid):
     return con.execute("SELECT COUNT(*) n FROM notifications WHERE student_id=? AND read=0", (uid,)).fetchone()["n"]
@@ -775,6 +787,40 @@ def build_motivari(con, uid):
     return {"classes": out}
 
 # ---- student snapshot ----
+def pack_list(lessons, last_item):
+    pack, seen = [], set()
+    for c in lessons:
+        rule = PACK_RULES.get(c["subject"])
+        if rule and rule not in seen:
+            seen.add(rule)
+            pack.append(rule)
+    return pack + [last_item] if lessons else pack
+
+def next_day_brief(tt, weekday, hour):
+    """In the evening: the next school day's lessons and what to pack for them."""
+    if hour < EVENING_HOUR:
+        return None
+    idx = weekday + 1 if weekday < 4 else 0
+    lessons = sorted((c for c in tt[idx] if c), key=lambda c: c["time"])
+    if not lessons:
+        return None
+    return {"label": "Mâine" if (idx - weekday) % 7 == 1 else FULLDAYS[idx], "count": len(lessons),
+            "first": lessons[0]["time"], "pack": pack_list(lessons, "Caietele pentru %s" % FULLDAYS[idx].lower())}
+
+def stress_forecast(collisions, subjects):
+    """The next clash of tests in the class, and which subject to start revising first."""
+    t = today()
+    ahead = [c for c in collisions if parse_iso(c["date"]) >= t]
+    if not ahead:
+        return None
+    c = ahead[0]
+    averages = {s["code"]: s["avg"] for s in subjects}
+    names = sorted({(averages.get(i["subject"], 11), i["subject"]) for i in c["items"]})
+    start = parse_iso(c["date"]) - timedelta(days=2)
+    when = "azi" if start <= t else "de %s" % FULLDAYS[start.weekday()].lower()
+    text = "%s: %d evaluări (%s)." % (c["dateLabel"], len(c["items"]), ", ".join(i["short"] for i in c["items"]))
+    return {"text": text, "advice": "Începe recapitularea cu %s %s." % (subj_name(names[0][1]), when)}
+
 def build_student(con, uid):
     u = user_row(con, uid)
     cid = u["class_id"]
@@ -789,14 +835,7 @@ def build_student(con, uid):
     now_min = now.hour * 60 + now.minute
     classes_today = sorted(({**cell, "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
                             for cell in tt[idx] if cell), key=lambda c: c["time"])
-    pack, seen = [], set()
-    for c in classes_today:
-        rule = PACK_RULES.get(c["subject"])
-        if rule and rule not in seen:
-            seen.add(rule)
-            pack.append(rule)
-    if classes_today:
-        pack.append("Caietele de azi")
+    pack = pack_list(classes_today, "Caietele de azi")
     # assessments for the class
     assess = con.execute("SELECT * FROM assessments WHERE class_id=? ORDER BY date", (cid,)).fetchall() if cid else []
     t = today()
@@ -851,6 +890,10 @@ def build_student(con, uid):
                          if ISO_RE.match(v["d"]) and v["d"] >= cutoff),
                         key=lambda g: (g["d"], g["id"]), reverse=True)
     label = "%s, %d %s" % (FULLDAYS[wd], t.day, MONTHS[t.month])
+    workload = class_workload(con, cid) if cid else None
+    upcoming = [{"id": a["id"], "date": a["date"], "subjectName": subj_name(a["subject"]), "hue": subj_hue(a["subject"]),
+                 "type": a["type"], "typeLabel": TYPE_LABEL[a["type"]], "title": a["title"]}
+                for a in assess if a["date"] >= iso(t)]
     recent = iso(t - timedelta(days=3))
     recent_announcements = [a for a in build_announcements(con, u)["items"] if a["createdAt"] >= recent][:3]
     return {
@@ -859,10 +902,14 @@ def build_student(con, uid):
         "subjects": {c: {"name": n, "hue": hue, "short": s} for c, (n, hue, s) in SUBJECTS.items()},
         "typeLabel": TYPE_LABEL,
         "today": {"weekdayIdx": idx, "isWeekend": is_weekend, "dateLabel": label,
-                  "classes": classes_today, "announcements": recent_announcements, "pack": pack, "due": due + due_tasks, "newGrades": new_grades},
+                  "classes": classes_today, "announcements": recent_announcements, "pack": pack,
+                  "nextDay": next_day_brief(tt, wd, now.hour),
+                  "forecast": stress_forecast(workload["collisions"], grades["subjects"]) if workload else None,
+                  "due": due + due_tasks, "newGrades": new_grades},
         "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
         "tasks": tasks,
         "grades": grades, "absences": absences,
+        "workload": workload, "upcoming": upcoming,
         "hasTimetable": bool(cid and any(any(row) for row in tt)),
         "unread": unread_count(con, uid),
     }
@@ -877,7 +924,7 @@ def build_grades(con, student_id):
         vals = [r["value"] for r in lst]
         avg = round(sum(vals) / len(vals), 2)
         subs.append({"code": code, "name": subj_name(code), "hue": subj_hue(code), "short": subj_short(code),
-                     "avg": avg, "risk": avg < 6,
+                     "avg": avg, "risk": avg < RISK_AVERAGE,
                      "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"],
                                  "teacher": teacher_name(con, r["teacher_id"])} for r in lst]})
     subs.sort(key=lambda s: s["name"])
@@ -1237,20 +1284,24 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/grades" and method == "POST":
             need_student_subject(con, me, body["studentId"], body["subject"])
             value, when, note = grade_value(body["value"]), entry_date(body.get("date")), clean_note(body.get("note"))
+            before = subject_average(con, int(body["studentId"]), body["subject"])
             cur = con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
                               (int(body["studentId"]), body["subject"], value, when, me["id"], note))
             notify(con, int(body["studentId"]), "grade", "Notă nouă la %s: %s" % (subj_name(body["subject"]), value),
                    " · ".join(x for x in (date_text(when), note, me["name"]) if x), "grade:%d" % cur.lastrowid)
+            alert_if_at_risk(con, int(body["studentId"]), body["subject"], before, "grade:%d" % cur.lastrowid)
             return {"ok": True}
         m = re.match(r"^/api/grades/(\d+)$", p)
         if m and method == "PATCH":
             r = owned_row(con, "grades", int(m.group(1)), me)
             value = grade_value(body.get("value", r["value"]))
+            before = subject_average(con, r["student_id"], r["subject"])
             con.execute("UPDATE grades SET value=?, date=?, note=? WHERE id=?",
                         (value, entry_date(body.get("date", r["date"])), clean_note(body.get("note", r["note"])), r["id"]))
             if value != r["value"]:
                 notify(con, r["student_id"], "grade", "Notă modificată la %s: %s" % (subj_name(r["subject"]), value),
                        "Era %s · %s" % (r["value"], me["name"]), "grade:%d" % r["id"])
+                alert_if_at_risk(con, r["student_id"], r["subject"], before, "grade:%d" % r["id"])
             return {"ok": True}
         if m and method == "DELETE":
             con.execute("DELETE FROM grades WHERE id=?", (owned_row(con, "grades", int(m.group(1)), me)["id"],))

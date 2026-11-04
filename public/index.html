@@ -452,9 +452,9 @@ function Heatmap({ wl, typeLabel }) {
                 <div className="flex items-center justify-between"><span className="text-[12px] font-700" style={{ color: h.fg }}>{d.dateLabel}</span>{d.clash && <Icons.alert size={13} style={{ color: h.fg }} />}</div>
                 <div className="mt-2 flex-1 space-y-1">
                   {d.items.length === 0 && <span className="text-[11px]" style={{ color: h.fg, opacity: .7 }}>liber</span>}
-                  {d.items.map((t, j) => <div key={j} className="truncate rounded-md bg-white/70 px-1.5 py-1 text-[10.5px] font-600 leading-tight" style={{ color: h.fg }}>{t.short} · {typeLabel[t.type].toLowerCase()}</div>)}
+                  {d.items.map((t, j) => <div key={j} className="truncate rounded-md bg-white/70 px-1 py-1 text-[10.5px] sm:px-1.5 font-600 leading-tight" style={{ color: h.fg }} title={`${t.short} · ${typeLabel[t.type].toLowerCase()}`}>{t.short}<span className="hidden sm:inline"> · {typeLabel[t.type].toLowerCase()}</span></div>)}
                 </div>
-                <span className="mt-2 text-[10px] font-700 uppercase tracking-wide" style={{ color: h.fg, opacity: .8 }}>{d.heat.label}</span>
+                <span className="mt-2 hidden text-[10px] font-700 uppercase tracking-wide sm:block" style={{ color: h.fg, opacity: .8 }}>{d.heat.label}</span>
               </motion.div>
             ); })}
           </div>
@@ -1524,6 +1524,7 @@ const NOTIFICATION_KINDS = {
   grade: { icon: Icons.chart, tone: 'bg-brand-50 text-brand-600', view: 'marks' },
   absence: { icon: Icons.calendar, tone: 'bg-heat-heavybg text-heat-heavy', view: 'marks' },
   excused: { icon: Icons.check, tone: 'bg-brand-50 text-brand-600', view: 'marks' },
+  risk: { icon: Icons.alert, tone: 'bg-heat-heavybg text-heat-heavy', view: 'marks' },
   announcement: { icon: Icons.megaphone, tone: 'bg-brand-50 text-brand-600', view: 'announcements' },
   assessment: { icon: Icons.book, tone: 'bg-paper text-ink', view: 'timetable' },
   reminder: { icon: Icons.alert, tone: 'bg-heat-heavybg text-heat-heavy', view: 'today' },
@@ -1579,6 +1580,12 @@ function StudentToday({ s, reload, onGoto }) {
         </div>
       </motion.header>
 
+      {t.forecast && (
+        <motion.section {...stagger(1)} className="mt-4 flex items-start gap-3 rounded-xl2 border border-heat-busy/30 bg-heat-busybg p-4">
+          <Icons.alert size={20} className="mt-0.5 shrink-0 text-heat-busy" />
+          <p className="min-w-0 text-sm"><b className="font-700">{t.forecast.text}</b> {t.forecast.advice}</p>
+        </motion.section>
+      )}
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <motion.section {...stagger(1)} className="lg:col-span-2 rounded-xl2 border border-line bg-white p-5 shadow-card">
           <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg font-700">Programul de azi</h2>{t.isWeekend && <Pill>weekend · previzualizare luni</Pill>}</div>
@@ -1617,6 +1624,13 @@ function StudentToday({ s, reload, onGoto }) {
               </AnimatePresence>
             </ul>
           </motion.section>
+          {t.nextDay && (
+            <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
+              <h2 className="font-display text-lg font-700">{t.nextDay.label}</h2>
+              <p className="mt-0.5 text-[13px] text-muted">{t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la {t.nextDay.first}</p>
+              <ul className="mt-3 space-y-1.5">{t.nextDay.pack.map((p) => <li key={p} className="flex items-center gap-2 text-sm"><Icons.bag size={15} className="shrink-0 text-muted" />{p}</li>)}</ul>
+            </motion.section>
+          )}
           {t.announcements.length > 0 && (
             <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
               <button onClick={() => onGoto('announcements')} className="mb-3 flex w-full items-center justify-between text-left"><h2 className="font-display text-lg font-700">Anunțuri</h2><Icons.chevR size={18} className="text-muted" /></button>
@@ -1656,6 +1670,19 @@ function StudentTimetable({ s }) {
       <ViewHead title="Orar" sub={s.hasTimetable ? `Săptămâna ${s.timetable.weekLabel} · azi evidențiat` : 'Orarul clasei tale'} icon={<Icons.grid />} />
       {!s.hasTimetable ? <Empty icon={<Icons.grid size={26} />} title="Orarul nu e gata" body="Administratorul adaugă orarul clasei tale. Imediat ce e pus, apare aici." />
         : <><TimetableGrid tt={s.timetable} /><p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-heavy" /> evaluare</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-heat-light" /> temă</span></p></>}
+      {s.workload && (
+        <section className="mt-6">
+          <h2 className="mb-3 font-display text-lg font-700">Evaluări</h2>
+          <Heatmap wl={s.workload} typeLabel={s.typeLabel} />
+          {s.upcoming.length > 0 && <ul className="mt-4 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">{s.upcoming.map((u, i) => (
+            <li key={u.id} className={cx('flex items-center gap-3 p-3.5', i && 'border-t border-line')}>
+              <span className="w-14 shrink-0 text-[13px] font-700 tnum text-muted">{fmtDate(u.date)}</span>
+              <Dot hue={u.hue} />
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-700">{u.title}</span><span className="block truncate text-[12.5px] text-muted">{u.subjectName} · {u.typeLabel}</span></span>
+            </li>
+          ))}</ul>}
+        </section>
+      )}
     </div>
   );
 }
@@ -1699,11 +1726,33 @@ function GradesPanel({ s, reload }) {
                   </div>
                 </button>
                 <GradeChips values={sub.values} />
+                <GradeChart values={sub.values} hue={sub.hue} name={sub.name} />
                 <AnimatePresence>{open === sub.code && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .25 }} className="overflow-hidden"><div className="mt-4 border-t border-line pt-4"><WhatINeed s={s} subject={sub.code} avg={sub.avg} reload={reload} /></div></motion.div>}</AnimatePresence>
               </motion.div>
             ))}
           </div>}
     </div>
+  );
+}
+/* One subject's grades over time. Single series, so no legend; each point has a tooltip and the chips above are its table view. */
+function GradeChart({ values, hue, name }) {
+  if (values.length < 2) return null;
+  const W = 300, H = 72, left = 14, right = 22, top = 8, bottom = 8;
+  const x = (i) => left + (i * (W - left - right)) / (values.length - 1);
+  const y = (v) => top + ((10 - v) * (H - top - bottom)) / 9;
+  const last = values[values.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${name}: note de la ${values[0].v} la ${last.v}`} className="mt-2 block h-auto w-full">
+      {[5, 10].map((v) => <g key={v}><line x1={left} x2={W - right} y1={y(v)} y2={y(v)} stroke="#E4E9E7" strokeWidth="1" /><text x="0" y={y(v) + 3.5} fontSize="10" fill="#5E6E6B">{v}</text></g>)}
+      <polyline points={values.map((g, i) => `${x(i)},${y(g.v)}`).join(' ')} fill="none" stroke={hue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {values.map((g, i) => (
+        <g key={g.id}>
+          <circle cx={x(i)} cy={y(g.v)} r="4" fill={hue} stroke="#fff" strokeWidth="2" />
+          <circle cx={x(i)} cy={y(g.v)} r="11" fill="transparent"><title>{`${g.v} · ${fmtDate(g.d)}`}</title></circle>
+        </g>
+      ))}
+      <text x={x(values.length - 1) + 8} y={y(last.v) + 4} fontSize="12" fontWeight="700" fill="#12201E">{last.v}</text>
+    </svg>
   );
 }
 /* Tap (or hover) a grade to see its date, note and teacher. */
