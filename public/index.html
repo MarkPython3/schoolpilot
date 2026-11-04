@@ -423,9 +423,31 @@ function ChangePassword({ account, onDone, onLogout }) {
 /* =====================================================================
  *  SHELL (sidebar + mobile nav), used by all three roles
  * ===================================================================== */
+function Profile({ account, roleLabel, onBack, onLogout }) {
+  const rows = [['Email', account.email], ['Rol', roleLabel], ['Școală', account.school], ['Clasă', account.class]].filter((r) => r[1]);
+  return (
+    <div className="mx-auto w-full max-w-[560px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
+      <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-sm font-700 text-muted hover:text-ink"><Icons.chevL size={16} /> Înapoi</button>
+      <ViewHead title="Profilul meu" icon={<Icons.user size={22} />} />
+      <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="flex items-center gap-3">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand-50 font-display text-xl font-700 text-brand-600">{initials(account.name)}</span>
+          <div className="min-w-0"><p className="truncate font-display text-lg font-700">{account.name}</p><p className="truncate text-[13px] text-muted">{roleLabel}</p></div>
+        </div>
+        <dl className="mt-4 divide-y divide-line border-t border-line">
+          {rows.map(([k, v]) => <div key={k} className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]"><dt className="shrink-0 text-muted">{k}</dt><dd className="min-w-0 break-words text-right font-700">{v}</dd></div>)}
+        </dl>
+      </div>
+      <button onClick={onLogout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-[14.5px] font-700 text-heat-heavy hover:bg-paper"><Icons.logout size={18} /> Ieși din cont</button>
+    </div>
+  );
+}
 function Shell({ account, nav, view, setView, onLogout, children }) {
   const reduce = useReducedMotion();
+  const [profile, setProfile] = useState(false);
   const roleLabel = { admin: 'Administrator', teacher: 'Profesor', student: 'Elev' }[account.role];
+  const go = (id) => { setProfile(false); setView(id); };
+  const openProfile = () => { setProfile(true); window.scrollTo(0, 0); };
   return (
     <MotionConfig reducedMotion="user">
       <div className="graph-paper min-h-screen">
@@ -433,29 +455,30 @@ function Shell({ account, nav, view, setView, onLogout, children }) {
           <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
             <div className="flex items-center gap-2.5 px-2"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></div>
             <nav className="mt-7 flex flex-col gap-1">
-              {nav.map((n) => { const on = view === n.id; return (
-                <button key={n.id} onClick={() => setView(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
+              {nav.map((n) => { const on = !profile && view === n.id; return (
+                <button key={n.id} onClick={() => go(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
                   {on && <motion.span layoutId="rail-active" transition={spring} className="absolute inset-0 rounded-xl bg-brand-50 ring-1 ring-brand-100" />}
                   <span className="relative z-10"><n.icon size={20} /></span><span className="relative z-10">{n.label}</span>
                 </button>
               ); })}
             </nav>
-            <div className="mt-auto rounded-xl border border-line bg-white p-2">
+            <button onClick={openProfile} aria-label="Profilul meu" className="mt-auto w-full rounded-xl border border-line bg-white p-2 text-left hover:bg-paper">
               <div className="flex items-center gap-2.5 px-1 py-1">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 font-700 text-brand-600 text-[13px]">{initials(account.name)}</span>
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[13px] font-700">{account.name}</span><span className="block truncate text-[11px] text-muted">{account.school || roleLabel}</span></span>
               </div>
-              <button onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[13px] font-700 text-muted hover:bg-paper hover:text-ink"><Icons.logout size={17} /> Ieși din cont</button>
-            </div>
+            </button>
           </aside>
 
           <main className="min-w-0 flex-1">
             <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
               <div className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></div>
-              <button onClick={onLogout} className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.logout size={14} /> {roleLabel}</button>
+              <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
             </header>
             <AnimatePresence mode="wait">
-              <motion.div key={view} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? {} : { opacity: 0, y: -8 }} transition={{ duration: .22 }}>{children}</motion.div>
+              <motion.div key={profile ? 'profile' : view} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? {} : { opacity: 0, y: -8 }} transition={{ duration: .22 }}>
+                {profile ? <Profile account={account} roleLabel={roleLabel} onBack={() => setProfile(false)} onLogout={onLogout} /> : children}
+              </motion.div>
             </AnimatePresence>
           </main>
         </div>
@@ -463,8 +486,8 @@ function Shell({ account, nav, view, setView, onLogout, children }) {
         {nav.length > 1 && (
           <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/90 backdrop-blur lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="mx-auto flex max-w-md items-stretch justify-around px-2 py-1.5">
-              {nav.map((n) => { const on = view === n.id; return (
-                <button key={n.id} onClick={() => setView(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
+              {nav.map((n) => { const on = !profile && view === n.id; return (
+                <button key={n.id} onClick={() => go(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
                   {on && <motion.span layoutId="tab-active" transition={spring} className="absolute inset-x-2 top-0 h-1 rounded-full bg-brand" />}
                   <n.icon size={21} className={on ? 'text-brand' : 'text-muted'} /><span className={cx('text-[10.5px] font-700', on ? 'text-brand' : 'text-muted')}>{n.label}</span>
                 </button>
