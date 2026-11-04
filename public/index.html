@@ -442,18 +442,19 @@ function Profile({ account, roleLabel, onBack, onLogout }) {
     </div>
   );
 }
-function Shell({ account, nav, view, setView, onLogout, children }) {
+function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
   const reduce = useReducedMotion();
   const [profile, setProfile] = useState(false);
   const roleLabel = { admin: 'Administrator', teacher: 'Profesor', student: 'Elev' }[account.role];
   const go = (id) => { setProfile(false); setView(id); };
   const openProfile = () => { setProfile(true); window.scrollTo(0, 0); };
+  const goHome = () => { setProfile(false); if (onHome) onHome(); else setView(nav[0].id); window.scrollTo(0, 0); };
   return (
     <MotionConfig reducedMotion="user">
       <div className="graph-paper min-h-screen">
         <div className="flex">
           <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
-            <div className="flex items-center gap-2.5 px-2"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></div>
+            <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2.5 px-2 text-left"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></button>
             <nav className="mt-7 flex flex-col gap-1">
               {nav.map((n) => { const on = !profile && view === n.id; return (
                 <button key={n.id} onClick={() => go(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
@@ -472,7 +473,7 @@ function Shell({ account, nav, view, setView, onLogout, children }) {
 
           <main className="min-w-0 flex-1">
             <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-              <div className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></div>
+              <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></button>
               <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
             </header>
             <AnimatePresence mode="wait">
@@ -514,7 +515,7 @@ function AdminApp({ account, onLogout }) {
   if (!a) return <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view="admin" setView={() => {}} onLogout={onLogout}>{err ? <div className="p-6"><LoadFailed err={err} retry={load} /></div> : <div className="p-10 text-muted"><Spinner size={18} /> Se încarcă…</div>}</Shell>;
   const school = a.schools.find((s) => s.id === schoolId) || null;
   return (
-    <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view={view} setView={() => {}} onLogout={onLogout}>
+    <Shell account={account} nav={[{ id: 'admin', label: 'Administrare', icon: Icons.building }]} view={view} setView={() => {}} onLogout={onLogout} onHome={() => setSchoolId(null)}>
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
         {!school
           ? <AdminSchools a={a} reload={load} onOpen={(id) => { setSchoolId(id); setTab('classes'); }} />
