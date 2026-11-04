@@ -65,8 +65,9 @@ and nothing else — you build the rest.
 - **Încărcare** — per-class workload heatmap + collision detector; schedule assessments with calmest-day suggestions.
 
 ### Student
-- **Azi** — morning brief: today's lessons, what to pack, what's due (add/tick personal tasks), and new grades from the last 3 days.
+- **Azi** — morning brief: today's lessons, what to pack, what's due (tick tasks done), and new grades from the last 3 days.
 - **Orar** — their class timetable with assessment markers.
+- **Notificări** — new or changed grades, absences (and when they're excused), announced tests and assignments, plus a reminder when one is due today or tomorrow; a badge counts the unread ones.
 - **Catalog** — read-only grades (date, note and teacher on tap/hover, averages, "what do I need?" calculator) and absences.
 
 ## Architecture
@@ -90,7 +91,8 @@ schoolpilot/
 | GET | `/api/teacher?userId=` · `/api/teacher/workload?classId=` | teacher |
 | POST/DELETE | `/api/assessments` | teacher |
 | GET | `/api/student?userId=` | student |
-| POST | `/api/tasks` · PATCH/DELETE `/api/tasks/:id` | student |
+| PATCH/DELETE | `/api/tasks/:id` | student |
+| GET | `/api/notifications` · POST `/api/notifications/read` | student |
 | POST | `/api/grades/what-if` | student |
 | GET | `/api/teacher/catalog?classId=&subject=` · `/api/teacher/motivari` | teacher |
 | POST · PATCH/DELETE `/:id` | `/api/grades`, `/api/absences` | teacher (own entries; diriginte can excuse) |

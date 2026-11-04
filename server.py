@@ -138,6 +138,10 @@ CREATE TABLE IF NOT EXISTS timetable (
   day INTEGER NOT NULL, period INTEGER NOT NULL,
   subject TEXT NOT NULL, teacher_id INTEGER, room TEXT, time TEXT, end_time TEXT
 );
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL, kind TEXT NOT NULL,
+  title TEXT NOT NULL, body TEXT, ref TEXT, created_at TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS assessments (
   id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL,
   subject TEXT NOT NULL, type TEXT NOT NULL, date TEXT NOT NULL,
@@ -349,12 +353,60 @@ def remove_users(con, rows):
         if r["email"]:
             forget_email(r["email"])
         uid = r["id"]
-        for t in ("grades", "absences", "tasks"):
+        for t in ("grades", "absences", "tasks", "notifications"):
             con.execute("DELETE FROM %s WHERE student_id=?" % t, (uid,))
         for t in ("timetable", "assessments", "grades", "absences"):
             con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
         con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
         con.execute("DELETE FROM users WHERE id=?", (uid,))
+
+def date_text(value):
+    try:
+        d = parse_iso(value)
+        return "%d %s" % (d.day, MONTHS[d.month])
+    except (TypeError, ValueError):
+        return value or ""
+
+def notify(con, student_id, kind, title, body="", ref=None):
+    con.execute("INSERT INTO notifications(student_id,kind,title,body,ref,created_at) VALUES(?,?,?,?,?,?)",
+                (student_id, kind, title, body, ref, datetime.now().isoformat(timespec="seconds")))
+
+def drop_notifications(con, *refs):
+    """The grade, absence or assessment behind them was deleted."""
+    con.executemany("DELETE FROM notifications WHERE ref=?", [(r,) for r in refs])
+
+def notify_class_assessment(con, assessment_id, class_id, subject, kind, day, title):
+    what = TYPE_LABEL.get(kind, "Evaluare")
+    text = "%s nouă la %s" % (what, subj_name(subject)) + ("" if title == what else ": %s" % title)
+    for s in con.execute("SELECT id FROM users WHERE role='student' AND class_id=?", (class_id,)).fetchall():
+        notify(con, s["id"], "assessment", text, "Pe %s" % date_text(day), "assessment:%d" % assessment_id)
+
+def add_due_reminders(con, uid, class_id):
+    """One reminder per test or assignment, the first time we see it is due today or tomorrow.
+    Skipped when the pupil was told about it today, so a late one doesn't arrive twice."""
+    t = today()
+    for a in con.execute("SELECT * FROM assessments WHERE class_id=? AND date IN (?,?)",
+                         (class_id, iso(t), iso(t + timedelta(days=1)))).fetchall():
+        ref = "reminder:%d" % a["id"]
+        if con.execute("""SELECT 1 FROM notifications WHERE student_id=?
+                          AND (ref=? OR (ref=? AND created_at>=?))""",
+                       (uid, ref, "assessment:%d" % a["id"], iso(t))).fetchone():
+            continue
+        when = "azi" if a["date"] == iso(t) else "mâine"
+        what = TYPE_LABEL.get(a["type"], "Evaluare")
+        notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
+               subj_name(a["subject"]), ref)
+
+def unread_count(con, uid):
+    return con.execute("SELECT COUNT(*) n FROM notifications WHERE student_id=? AND read=0", (uid,)).fetchone()["n"]
+
+def build_notifications(con, uid, class_id):
+    if class_id:
+        add_due_reminders(con, uid, class_id)
+    rows = con.execute("SELECT * FROM notifications WHERE student_id=? ORDER BY id DESC LIMIT 100", (uid,)).fetchall()
+    return {"unread": unread_count(con, uid),
+            "items": [{"id": r["id"], "kind": r["kind"], "title": r["title"], "body": r["body"] or "",
+                       "createdAt": r["created_at"], "read": bool(r["read"])} for r in rows]}
 
 def teacher_class_ids(con, uid):
     return [r["class_id"] for r in con.execute("SELECT DISTINCT class_id FROM timetable WHERE teacher_id=?", (uid,)).fetchall()]
@@ -637,6 +689,8 @@ def build_student(con, uid):
     cid = u["class_id"]
     cls = class_name(con, cid)
     tt = build_timetable(con, cid) if cid else [[None] * len(PERIODS) for _ in range(5)]
+    if cid:
+        add_due_reminders(con, uid, cid)
     wd = today().weekday()
     is_weekend = wd > 4
     idx = wd if not is_weekend else 0
@@ -717,6 +771,7 @@ def build_student(con, uid):
         "tasks": tasks,
         "grades": grades, "absences": absences,
         "hasTimetable": bool(cid and any(any(row) for row in tt)),
+        "unread": unread_count(con, uid),
     }
 
 def build_grades(con, student_id):
@@ -898,6 +953,9 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/student":
             need(me, "student")
             return build_student(con, me["id"])
+        if p == "/api/notifications":
+            need(me, "student")
+            return build_notifications(con, me["id"], me["class_id"])
         raise HttpError(404, "not found")
 
     def do_POST(self):
@@ -950,6 +1008,8 @@ class Handler(BaseHTTPRequestHandler):
         if m and method == "DELETE":
             cid = int(m.group(1))
             con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
+            for a in con.execute("SELECT id FROM assessments WHERE class_id=?", (cid,)).fetchall():
+                drop_notifications(con, "assessment:%d" % a["id"], "reminder:%d" % a["id"])
             con.execute("DELETE FROM assessments WHERE class_id=?", (cid,))
             con.execute("UPDATE users SET class_id=NULL WHERE class_id=?", (cid,))
             con.execute("DELETE FROM classes WHERE id=?", (cid,))
@@ -1015,10 +1075,11 @@ class Handler(BaseHTTPRequestHandler):
             need(me, "teacher")
             cid = int(body["classId"])
             need_class(con, me, cid)
-            con.execute("INSERT INTO assessments(class_id,subject,type,date,title,teacher_id) VALUES(?,?,?,?,?,?)",
-                        (cid, body["subject"], body.get("type", "test"),
-                         body["date"], (body.get("title") or TYPE_LABEL.get(body.get("type", "test"), "Evaluare")),
-                         me["id"]))
+            kind = body.get("type", "test")
+            title = body.get("title") or TYPE_LABEL.get(kind, "Evaluare")
+            cur = con.execute("INSERT INTO assessments(class_id,subject,type,date,title,teacher_id) VALUES(?,?,?,?,?,?)",
+                              (cid, body["subject"], kind, body["date"], title, me["id"]))
+            notify_class_assessment(con, cur.lastrowid, cid, body["subject"], kind, body["date"], title)
             return {"ok": True}
         m = re.match(r"^/api/assessments/(\d+)$", p)
         if m and method == "DELETE":
@@ -1027,15 +1088,15 @@ class Handler(BaseHTTPRequestHandler):
                 con.execute("DELETE FROM assessments WHERE id=?", (int(m.group(1)),))
             elif not con.execute("DELETE FROM assessments WHERE id=? AND teacher_id=?", (int(m.group(1)), me["id"])).rowcount:
                 raise HttpError(404, "not found")
+            drop_notifications(con, "assessment:%s" % m.group(1), "reminder:%s" % m.group(1))
             return {"ok": True}
 
         # ---------- student: own tasks + calculator (grades and absences are read-only) ----------
         if p.startswith("/api/tasks") or p == "/api/grades/what-if":
             need(me, "student")
-        if p == "/api/tasks" and method == "POST":
-            con.execute("INSERT INTO tasks(student_id,title,subject,type,due,done,created_at) VALUES(?,?,?,?,?,0,?)",
-                        (me["id"], (body["title"] or "").strip(), body.get("subject"),
-                         body.get("type", "tema"), body.get("due"), now))
+        if p == "/api/notifications/read" and method == "POST":
+            need(me, "student")
+            con.execute("UPDATE notifications SET read=1 WHERE student_id=?", (me["id"],))
             return {"ok": True}
         m = re.match(r"^/api/tasks/(\d+)$", p)
         if m and method in ("PATCH", "DELETE"):
@@ -1056,19 +1117,25 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- teacher: grades ----------
         if p == "/api/grades" and method == "POST":
             need_student_subject(con, me, body["studentId"], body["subject"])
-            con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
-                        (int(body["studentId"]), body["subject"], grade_value(body["value"]),
-                         entry_date(body.get("date")), me["id"], clean_note(body.get("note"))))
+            value, when, note = grade_value(body["value"]), entry_date(body.get("date")), clean_note(body.get("note"))
+            cur = con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
+                              (int(body["studentId"]), body["subject"], value, when, me["id"], note))
+            notify(con, int(body["studentId"]), "grade", "Notă nouă la %s: %s" % (subj_name(body["subject"]), value),
+                   " · ".join(x for x in (date_text(when), note, me["name"]) if x), "grade:%d" % cur.lastrowid)
             return {"ok": True}
         m = re.match(r"^/api/grades/(\d+)$", p)
         if m and method == "PATCH":
             r = owned_row(con, "grades", int(m.group(1)), me)
+            value = grade_value(body.get("value", r["value"]))
             con.execute("UPDATE grades SET value=?, date=?, note=? WHERE id=?",
-                        (grade_value(body.get("value", r["value"])), entry_date(body.get("date", r["date"])),
-                         clean_note(body.get("note", r["note"])), r["id"]))
+                        (value, entry_date(body.get("date", r["date"])), clean_note(body.get("note", r["note"])), r["id"]))
+            if value != r["value"]:
+                notify(con, r["student_id"], "grade", "Notă modificată la %s: %s" % (subj_name(r["subject"]), value),
+                       "Era %s · %s" % (r["value"], me["name"]), "grade:%d" % r["id"])
             return {"ok": True}
         if m and method == "DELETE":
             con.execute("DELETE FROM grades WHERE id=?", (owned_row(con, "grades", int(m.group(1)), me)["id"],))
+            drop_notifications(con, "grade:%s" % m.group(1))
             return {"ok": True}
 
         # ---------- teacher: absences ----------
@@ -1080,8 +1147,10 @@ class Handler(BaseHTTPRequestHandler):
                 need_student_subject(con, me, sid, body["subject"])
                 if not con.execute("SELECT 1 FROM absences WHERE student_id=? AND subject=? AND date=?",
                                    (sid, body["subject"], when)).fetchone():
-                    con.execute("INSERT INTO absences(student_id,subject,kind,date,teacher_id) VALUES(?,?,'unexcused',?,?)",
-                                (sid, body["subject"], when, me["id"]))
+                    cur = con.execute("INSERT INTO absences(student_id,subject,kind,date,teacher_id) VALUES(?,?,'unexcused',?,?)",
+                                      (sid, body["subject"], when, me["id"]))
+                    notify(con, sid, "absence", "Absență nouă la %s" % subj_name(body["subject"]),
+                           "%s · %s" % (date_text(when), me["name"]), "absence:%d" % cur.lastrowid)
                     added += 1
             return {"added": added, "alreadyMarked": len(ids) - added}
         m = re.match(r"^/api/absences/(\d+)$", p)
@@ -1097,6 +1166,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise HttpError(403, "Doar dirigintele sau profesorul care a notat absența o poate motiva.")
                 con.execute("UPDATE absences SET kind=? WHERE id=?",
                             ("excused" if body["excused"] else "unexcused", r["id"]))
+                if body["excused"] and r["kind"] != "excused":
+                    notify(con, r["student_id"], "excused", "Absență motivată la %s" % subj_name(r["subject"]),
+                           "%s · %s" % (date_text(r["date"]), me["name"]), "absence:%d" % r["id"])
             if "date" in body:
                 owned_row(con, "absences", r["id"], me)
                 when = entry_date(body["date"])
@@ -1107,12 +1179,13 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         if m and method == "DELETE":
             con.execute("DELETE FROM absences WHERE id=?", (owned_row(con, "absences", int(m.group(1)), me)["id"],))
+            drop_notifications(con, "absence:%s" % m.group(1))
             return {"ok": True}
 
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
-            for t in ["timetable", "assessments", "grades", "absences", "tasks", "classes", "schools"]:
+            for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
             return {"ok": True}
 
