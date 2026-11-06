@@ -400,10 +400,11 @@ function Stepper({ value, set, min = 1, max = 10 }) {
   );
 }
 function StatTile({ label, value, tone, icon, sub }) {
+  const numeric = /^[\d.,%\s]+$/.test(String(value)); // figures in DM Mono; words stay in Schibsted
   return (
     <div className="rounded-xl2 border border-line bg-white p-4 shadow-card">
       <div className="flex items-center gap-2 text-muted"><span style={{ color: tone }}>{icon}</span><span className="text-[12px] font-600">{label}</span></div>
-      <div className="mt-1.5 font-display text-2xl font-700 tnum" style={{ color: tone }}>{value}</div>
+      <div className={cx('mt-1.5 text-2xl', numeric ? 'font-mono font-500 tnum' : 'font-display font-700')} style={{ color: tone }}>{value}</div>
       {sub && <div className="mt-0.5 text-[11.5px] text-muted">{sub}</div>}
     </div>
   );
@@ -1834,7 +1835,7 @@ function StudentToday({ s, reload, onGoto }) {
             <span className="plastic px-2 py-0.5 text-[12px] font-600" style={{ '--t': 'var(--color-accent-soft)', borderRadius: 999 }}>{s.student.class}</span>
             <span className="text-[12.5px]">{t.module.label}</span>
           </div>
-          <h1 className="mt-2.5 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight">{t.classes.length} ore</span>{t.due.length > 0 && <> și <span className="highlight">{t.due.length} de predat</span></>}.</h1>
+          <h1 className="mt-2.5 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight">{t.classes.length} {t.classes.length === 1 ? 'oră' : 'ore'}</span>{t.due.length > 0 && <> și <span className="highlight">{t.due.length} de predat</span></>}</h1>
           <p className="mt-2 max-w-xl text-[15px] text-muted">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
           <div className="mt-5 flex flex-wrap items-center gap-3"><ShimmerButton icon={<Icons.grid size={18} />} onClick={() => onGoto('timetable')}>Vezi orarul</ShimmerButton></div>
         </div>
