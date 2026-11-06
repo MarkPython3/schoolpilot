@@ -101,7 +101,18 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   *:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 6px; }
-  @media (prefers-reduced-motion: reduce) { .window-light::before { animation: none; } }
+  /* daylight: faint window light drifting across the whole app, behind the content */
+  .daylight { isolation: isolate; }
+  .daylight::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      linear-gradient(112deg, transparent 18%, color-mix(in oklab, var(--light) 58%, transparent) 29%, transparent 41%),
+      linear-gradient(112deg, transparent 54%, color-mix(in oklab, var(--light) 44%, transparent) 63%, transparent 73%);
+    filter: blur(32px); transform: skewX(-9deg);
+    animation: daydrift 120s ease-in-out infinite alternate;
+  }
+  @keyframes daydrift { from { transform: translate3d(-4%,0,0) skewX(-9deg); } to { transform: translate3d(6%,0,0) skewX(-9deg); } }
+  @media (prefers-reduced-motion: reduce) { .window-light::before, .daylight::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -570,8 +581,9 @@ function OrganiserPreview() {
     { d: 'Vin', key: 'fri', rows: [['08:00', 'Mate']], today: true },
   ];
   return (
-    <div className="mt-10 select-none" style={{ perspective: '1100px' }} aria-hidden="true">
-      <div className="flex gap-2.5" style={{ transform: 'rotateX(16deg) rotateZ(-5deg)', transformOrigin: 'center bottom' }}>
+    <div className="relative mt-10 select-none" style={{ perspective: '1100px' }} aria-hidden="true">
+      <div className="pointer-events-none absolute inset-x-2 bottom-0 h-14 blur-2xl" style={{ background: 'linear-gradient(90deg, var(--p-mon), var(--p-tue), var(--p-wed), var(--p-thu), var(--p-fri))', opacity: .5 }} />
+      <div className="relative flex gap-2.5" style={{ transform: 'rotateX(16deg) rotateZ(-5deg)', transformOrigin: 'center bottom' }}>
         {days.map((day) => (
           <div key={day.key} className="plastic flex-1 p-2.5" style={{ '--t': `var(--p-${day.key})`, minWidth: 0 }}>
             <div className="flex items-center justify-between">
@@ -708,7 +720,7 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
   const goHome = () => { setProfile(false); if (onHome) onHome(); else setView(nav[0].id); window.scrollTo(0, 0); };
   return (
     <MotionConfig reducedMotion="user">
-      <div className="graph-paper min-h-screen">
+      <div className="graph-paper daylight min-h-screen">
         <div className="flex">
           <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
             <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2.5 px-2 text-left"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></button>
