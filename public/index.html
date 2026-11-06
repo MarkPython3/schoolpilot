@@ -1827,13 +1827,15 @@ function StudentToday({ s, reload, onGoto }) {
   if (!s.student.classId) return <div><ViewHead title={`Bună, ${s.student.name.split(' ')[0]}`} icon={<Icons.sun />} /><Empty icon={<Icons.sun size={26} />} title="Încă nu ești într-o clasă" body="Administratorul te repartizează la o clasă și îți adaugă orarul. Apoi aici apare rezumatul zilei tale." /></div>;
   return (
     <div>
-      <motion.header {...stagger(0)} className="relative overflow-hidden rounded-xl2 bg-ink p-6 text-white shadow-lift sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand/40 blur-3xl" />
-        <div className="pointer-events-none absolute right-24 top-12 h-28 w-28 rounded-full bg-brand/20 blur-2xl" />
+      <motion.header {...stagger(0)} className="window-light relative overflow-hidden rounded-xl2 border border-line p-6 shadow-card sm:p-8" style={{ background: 'var(--color-paper-2)' }}>
         <div className="relative">
-          <p className="flex items-center gap-2 text-sm font-500 text-white/60"><Icons.sun size={16} /> {t.dateLabel} · {s.student.class} · {t.module.label}</p>
-          <h1 className="mt-2 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight text-ink">{t.classes.length} ore</span>{t.due.length > 0 && <> și <span className="highlight text-ink">{t.due.length} de predat</span></>}.</h1>
-          <p className="mt-2 max-w-xl text-[15px] text-white/70">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
+          <div className="flex flex-wrap items-center gap-2 text-muted">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[13px] font-500"><Icons.sun size={16} /> {t.dateLabel}</span>
+            <span className="plastic px-2 py-0.5 text-[12px] font-600" style={{ '--t': 'var(--color-accent-soft)', borderRadius: 999 }}>{s.student.class}</span>
+            <span className="text-[12.5px]">{t.module.label}</span>
+          </div>
+          <h1 className="mt-2.5 font-display text-[28px] font-700 leading-tight sm:text-[38px]">Bună, {s.student.name.split(' ')[0]}. Azi ai <span className="highlight">{t.classes.length} ore</span>{t.due.length > 0 && <> și <span className="highlight">{t.due.length} de predat</span></>}.</h1>
+          <p className="mt-2 max-w-xl text-[15px] text-muted">Săptămâna nu te mai prinde pe picior greșit — iată tot ce contează, pus în ordine.</p>
           <div className="mt-5 flex flex-wrap items-center gap-3"><ShimmerButton icon={<Icons.grid size={18} />} onClick={() => onGoto('timetable')}>Vezi orarul</ShimmerButton></div>
         </div>
       </motion.header>
@@ -1851,7 +1853,7 @@ function StudentToday({ s, reload, onGoto }) {
             : <ol className="relative"><span className="absolute left-[62px] top-2 bottom-2 w-px bg-line" />
                 {t.classes.map((c, i) => (
                   <li key={i} className="relative flex items-stretch gap-4 py-1.5">
-                    <div className="w-12 shrink-0 pt-1 text-right tnum text-muted"><div className="text-[13px] font-600">{c.time}</div><div className="text-[11px]">{c.end}</div></div>
+                    <div className="w-12 shrink-0 pt-1 text-right font-mono text-muted"><div className="text-[13px] font-500">{c.time}</div><div className="text-[11px]">{c.end}</div></div>
                     <div className="relative z-10 mt-1.5 grid place-items-center"><span className={cx('h-3 w-3 rounded-full ring-4 ring-white', c.current ? 'bg-brand' : 'bg-line')} /></div>
                     <div className={cx('flex min-w-0 flex-1 items-center justify-between rounded-xl px-3.5 py-2.5', c.current ? 'bg-brand-50 ring-1 ring-brand-100' : 'hover:bg-paper')}>
                       <div className="min-w-0"><div className="flex items-center gap-2"><Dot hue={c.hue} /><span className={cx('min-w-0 font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>{c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}{c.teacher && <div className="mt-0.5 text-[12.5px] text-muted">{c.teacher}</div>}</div>
