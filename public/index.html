@@ -58,6 +58,7 @@
     --light: oklch(99.4% 0.016 84); --glint: oklch(100% 0 0);
     --radius-card: 14px; --radius-input: 10px;
   }
+  html, body { overflow-x: clip; }
   html { -webkit-text-size-adjust: 100%; }
   body { font-family: "Instrument Sans", ui-sans-serif, system-ui, sans-serif; background: var(--color-paper); color: var(--color-ink); -webkit-font-smoothing: antialiased; }
   .font-display { font-family: "Schibsted Grotesk", ui-sans-serif, sans-serif; letter-spacing: -0.03em; font-synthesis: none; }
@@ -446,7 +447,7 @@ function Empty({ icon, title, body }) {
 function Field({ label, children }) {
   return <label className="block"><span className="mb-1 block text-[12px] font-700 text-muted">{label}</span>{children}</label>;
 }
-function Input(p) { return <input {...p} className={cx('w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand', p.className)} />; }
+function Input(p) { return <input {...p} className={cx('w-full rounded-xl border border-muted bg-white px-3 py-2.5 text-sm outline-none focus:border-brand', p.className)} />; }
 function initials(name) { return (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase(); }
 function useCountUp(value, dur = 700) {
   const [v, setV] = useState(value); const reduce = useReducedMotion(); const prev = useRef(value);
@@ -558,15 +559,58 @@ function TimetableGrid({ tt, onCell }) {
 /* =====================================================================
  *  LOGIN
  * ===================================================================== */
+// The signature object: a school week as a pill organiser, catching window light.
+function OrganiserPreview() {
+  const days = [
+    { d: 'Lun', key: 'mon', rows: [['08:00', 'Mate'], ['10:00', 'Rom']] },
+    { d: 'Mar', key: 'tue', rows: [['09:00', 'Fiz']] },
+    { d: 'Mie', key: 'wed', rows: [['08:00', 'Chim'], ['11:00', 'Bio']] },
+    { d: 'Joi', key: 'thu', rows: [['10:00', 'Eng']] },
+    { d: 'Vin', key: 'fri', rows: [['08:00', 'Mate']], today: true },
+  ];
+  return (
+    <div className="mt-10 select-none" style={{ perspective: '1100px' }} aria-hidden="true">
+      <div className="flex gap-2.5" style={{ transform: 'rotateX(16deg) rotateZ(-5deg)', transformOrigin: 'center bottom' }}>
+        {days.map((day) => (
+          <div key={day.key} className="plastic flex-1 p-2.5" style={{ '--t': `var(--p-${day.key})`, minWidth: 0 }}>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] font-500" style={{ color: 'var(--color-ink-2)' }}>{day.d}</span>
+              {day.today && <span className="rounded-full px-1.5 text-[9px] font-700" style={{ background: 'var(--color-accent)', color: 'var(--color-accent-ink)' }}>azi</span>}
+            </div>
+            <div className="mt-2 space-y-1">
+              {day.rows.map(([tm, subj]) => (
+                <div key={tm + subj} className="truncate rounded px-1.5 py-1 text-[9.5px] font-600" style={{ background: 'rgba(255,255,255,.6)', color: 'var(--color-ink-2)' }}>
+                  <span className="font-mono">{tm}</span> {subj}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function AuthCard({ sub, children }) {
   return (
     <div className="graph-paper min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-12">
-        <div className="mb-8 flex items-center gap-3">
-          <Logo size={44} />
-          <div><p className="font-display text-2xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">{sub}</p></div>
+      <div className="mx-auto min-h-screen w-full max-w-[1600px] lg:grid lg:grid-cols-[1.08fr_minmax(0,500px)]">
+      <aside className="window-light relative hidden overflow-hidden px-12 py-12 xl:px-16 lg:flex lg:flex-col lg:justify-between" style={{ background: 'var(--color-paper-2)' }}>
+        <div className="relative flex items-center gap-3"><Logo size={40} /><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p></div>
+        <div className="relative max-w-xl">
+          <h1 className="font-display font-700 leading-[1.03]" style={{ fontSize: 'clamp(2.4rem, 3.4vw, 3.4rem)' }}>Săptămâna ta de școală, pusă în ordine dinainte.</h1>
+          <p className="mt-4 max-w-md text-[15.5px] text-muted">Orar, note, teme și evaluări, toate într-un singur loc — calm, clar, al tău.</p>
+          <OrganiserPreview />
         </div>
-        <div className="rounded-xl2 border border-line bg-white p-6 shadow-card">{children}</div>
+        <p className="relative text-[12.5px] text-muted">Pentru elevi, profesori și administratori.</p>
+      </aside>
+      <main className="flex min-h-screen flex-col justify-center px-6 py-12 sm:px-10">
+        <div className="mx-auto w-full max-w-sm">
+          <div className="mb-7 flex items-center gap-3 lg:hidden">
+            <Logo size={42} /><div><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">{sub}</p></div>
+          </div>
+          {children}
+        </div>
+      </main>
       </div>
     </div>
   );
