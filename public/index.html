@@ -1189,17 +1189,21 @@ function LessonChangeForm({ lesson, colleagues, onClose, onSaved }) {
   );
 }
 /* Kokonut-adapted split-flap number (departure-board flourish), Motion-driven. */
-function SplitFlap({ value }) {
+function SplitFlap({ value, big }) {
   const reduce = useReducedMotion();
+  const sz = big ? 'text-3xl px-2 py-1 sm:text-[2.6rem]' : 'text-[13px] px-1 py-0.5';
   return (
-    <span className="inline-flex items-center gap-0.5 font-mono tabular-nums" aria-label={String(value)}>
-      {String(value).split('').map((ch, i) => (
-        <span key={i} aria-hidden="true" className="relative inline-block overflow-hidden rounded px-1 py-0.5 text-[13px] leading-none" style={{ background: 'var(--color-ink)', color: 'var(--color-accent-ink)' }}>
-          <AnimatePresence mode="popLayout" initial={!reduce}>
-            <motion.span key={ch} initial={reduce ? false : { y: '-110%' }} animate={{ y: 0 }} exit={{ y: '110%' }} transition={{ type: 'spring', stiffness: 320, damping: 26 }} className="block">{ch}</motion.span>
-          </AnimatePresence>
-        </span>
-      ))}
+    <span className={cx('inline-flex items-end font-mono tabular-nums', big ? 'gap-1' : 'gap-0.5')} aria-label={String(value)}>
+      {String(value).split('').map((ch, i) => {
+        const sep = ch === '.' || ch === ',';
+        return sep
+          ? <span key={i} aria-hidden="true" className={cx('leading-none', big ? 'px-0.5 text-3xl sm:text-[2.6rem]' : 'text-[13px]')} style={{ color: 'var(--color-ink)' }}>{ch}</span>
+          : <span key={i} aria-hidden="true" className={cx('relative inline-block overflow-hidden rounded leading-none', sz)} style={{ background: 'var(--color-ink)', color: 'var(--color-accent-ink)' }}>
+              <AnimatePresence mode="popLayout" initial={!reduce}>
+                <motion.span key={ch} initial={reduce ? false : { y: '-110%' }} animate={{ y: 0 }} exit={{ y: '110%' }} transition={{ type: 'spring', stiffness: 320, damping: 26 }} className="block">{ch}</motion.span>
+              </AnimatePresence>
+            </span>;
+      })}
     </span>
   );
 }
@@ -2121,11 +2125,16 @@ function GradesPanel({ s, reload }) {
   return (
     <div>
       {g.subjects.length > 0 && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Media generală" value={animOverall.toFixed(2)} tone="#0D9488" icon={<Icons.target size={16} />} />
-          <StatTile label="Materii" value={g.subjects.length} tone="#0E7490" icon={<Icons.book size={16} />} />
-          {g.best && <StatTile label="Cea mai bună" value={g.best.short} tone="#16A34A" icon={<Icons.spark size={16} />} sub={`media ${g.best.avg.toFixed(2)}`} />}
-          {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
+        <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(210px,0.8fr)_1.25fr]">
+          <div className="window-light relative overflow-hidden rounded-xl2 border border-line p-5 shadow-card" style={{ background: 'var(--color-paper-2)' }}>
+            <p className="text-[12.5px] font-600 text-muted">Media generală</p>
+            <div className="mt-2.5 flex items-end gap-2"><SplitFlap value={g.overall.toFixed(2)} big /><span className="pb-1.5 text-[12.5px] text-muted">anuală</span></div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <StatTile label="Materii" value={g.subjects.length} tone="#0E7490" icon={<Icons.book size={16} />} />
+            {g.best && <StatTile label="Cea mai bună" value={g.best.short} tone="#16A34A" icon={<Icons.spark size={16} />} sub={`media ${g.best.avg.toFixed(2)}`} />}
+            {g.worst && <StatTile label="De urmărit" value={g.worst.short} tone="#D92626" icon={<Icons.alert size={16} />} sub={`media ${g.worst.avg.toFixed(2)}`} />}
+          </div>
         </div>
       )}
       {g.subjects.length > 0 && <PickChips label="Perioada" options={[{ id: 0, label: 'Tot anul' }, ...g.modules.map((n) => ({ id: n, label: `M${n}` }))]} value={mod} onChange={setMod} />}
