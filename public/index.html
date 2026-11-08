@@ -1188,39 +1188,74 @@ function LessonChangeForm({ lesson, colleagues, onClose, onSaved }) {
     </Modal>
   );
 }
+/* Kokonut-adapted split-flap number (departure-board flourish), Motion-driven. */
+function SplitFlap({ value }) {
+  const reduce = useReducedMotion();
+  return (
+    <span className="inline-flex items-center gap-0.5 font-mono tabular-nums" aria-label={String(value)}>
+      {String(value).split('').map((ch, i) => (
+        <span key={i} aria-hidden="true" className="relative inline-block overflow-hidden rounded px-1 py-0.5 text-[13px] leading-none" style={{ background: 'var(--color-ink)', color: 'var(--color-accent-ink)' }}>
+          <AnimatePresence mode="popLayout" initial={!reduce}>
+            <motion.span key={ch} initial={reduce ? false : { y: '-110%' }} animate={{ y: 0 }} exit={{ y: '110%' }} transition={{ type: 'spring', stiffness: 320, damping: 26 }} className="block">{ch}</motion.span>
+          </AnimatePresence>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function TeacherSchedule({ t, reload }) {
+  const reduce = useReducedMotion();
   const hasAny = t.schedule.some((d) => d.length);
   const [changing, setChanging] = useState(null);
   const undo = async (c) => {
     if (!await askConfirm({ title: `Anulezi schimbarea din ${fmtDate(c.date)}?`, body: `${c.subjectName}, ${c.className}: ora revine la programul obișnuit.`, action: 'Anulează schimbarea' })) return;
     API.del(`/api/lesson-changes/${c.id}`).then(() => { toast.success('Schimbarea a fost anulată.'); return reload(); }).catch(toastError);
   };
+  const toMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+  const all = t.schedule.flat();
+  const start = Math.floor(Math.min(8 * 60, ...all.map((s) => toMin(s.time))) / 60) * 60;
+  const end = Math.ceil(Math.max(14 * 60, ...all.map((s) => toMin(s.end))) / 60) * 60;
+  const PX = 1.3, H = (end - start) * PX;
+  const hours = []; for (let h = start; h <= end; h += 60) hours.push(h);
+  const fmtH = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:00`;
   return (
     <div>
-      <ViewHead title="Orarul meu" sub={t.classes.length ? `Orele tale la ${t.classes.map((c) => c.name).join(', ')}` : 'Doar orele tale'} icon={<Icons.grid />} />
+      <ViewHead title="Orarul meu" sub={t.classes.length ? `Orele tale la ${t.classes.map((c) => c.name).join(', ')}` : 'Doar orele tale'} icon={<Icons.grid />}
+        right={all.length > 0 && <div className="hidden items-center gap-2 sm:flex"><SplitFlap value={all.length} /><span className="text-[13px] font-600 text-muted">ore pe săptămână</span></div>} />
       {t.changes.length > 0 && <ul className="mb-4 overflow-hidden rounded-xl2 border border-line bg-white shadow-card">{t.changes.map((c, i) => (
         <li key={c.id} className={cx('flex items-center gap-3 p-3.5', i && 'border-t border-line')}>
-          <div className="min-w-0 flex-1"><p className="truncate text-sm font-700">{c.label}</p><p className="truncate text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time} · {c.subjectName} · {c.className}</p></div>
+          <div className="min-w-0 flex-1"><p className="truncate text-sm font-700">{c.label}</p><p className="truncate text-[12.5px] text-muted">{c.subjectName}, {c.className}, {fmtDate(c.date)} {c.time}</p></div>
           {c.mine && <button onClick={() => undo(c)} aria-label="Anulează schimbarea" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-heat-heavybg hover:text-heat-heavy"><Icons.trash size={16} /></button>}
         </li>
       ))}</ul>}
       {!hasAny ? <Empty icon={<Icons.grid size={26} />} title="Nu ai ore încă" body="Administratorul te pune în orar. Odată adăugat, vei vedea aici doar orele tale." />
-        : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {DAYS.map((day, di) => (
-              <section key={di} className={cx('rounded-xl2 border bg-white p-4 shadow-card', di === t.todayIdx ? 'border-brand-200 ring-1 ring-brand-100' : 'border-line')}>
-                <h3 className={cx('mb-3 text-sm font-700', di === t.todayIdx ? 'text-brand-600' : 'text-ink')}>{day}{di === t.todayIdx && <span className="ml-1 text-[11px] font-600 text-brand">azi</span>}</h3>
-                <div className="space-y-2">
-                  {t.schedule[di].length === 0 && <p className="text-[12.5px] text-muted">liber</p>}
-                  {t.schedule[di].map((s, i) => (
-                    <div key={i} className="rounded-xl border border-line p-2.5" style={{ borderLeft: `3px solid ${s.hue}` }}>
-                      <div className="flex items-center justify-between"><span className="text-[12px] font-700 tnum text-muted">{s.time}–{s.end}</span><span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-700 text-brand-600">{s.className}</span></div>
-                      <p className="mt-1 text-[13.5px] font-700 leading-tight">{s.subjectName}</p>
-                      <div className="flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[11.5px] text-muted">{s.room || '—'}</p><button onClick={() => setChanging(s)} className="shrink-0 rounded-md px-1.5 py-1 text-[12px] font-700 text-brand-600 hover:bg-brand-50">Schimbă</button></div>
-                    </div>
-                  ))}
+        : <div className="overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card sm:p-4">
+            <div className="grid min-w-[720px] gap-x-2" style={{ gridTemplateColumns: '54px repeat(5, minmax(0, 1fr))' }}>
+              <div />
+              {DAYS.map((day, di) => (<div key={di} className={cx('mb-3 rounded-lg px-2 py-2 text-center text-sm font-700', di === t.todayIdx ? 'bg-brand text-white' : 'text-ink')}>{day}{di === t.todayIdx && <span className="ml-1 text-[11px] font-500 text-white/70">azi</span>}</div>))}
+              <div className="relative font-mono text-[11px] text-muted" style={{ height: H }}>
+                {hours.map((h) => (<div key={h} className="absolute right-1.5" style={{ top: (h - start) * PX - 6 }}>{fmtH(h)}</div>))}
+              </div>
+              {t.schedule.map((day, di) => (
+                <div key={di} className={cx('relative rounded-lg border-l border-line', di === t.todayIdx && 'bg-brand-50/40')} style={{ height: H }}>
+                  {hours.map((h) => (<div key={h} className="pointer-events-none absolute inset-x-0 border-t border-line/60" style={{ top: (h - start) * PX }} />))}
+                  {day.map((s, i) => {
+                    const top = (toMin(s.time) - start) * PX, height = Math.max(36, (toMin(s.end) - toMin(s.time)) * PX - 3);
+                    return (
+                      <motion.button key={i} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + di * 0.04 + i * 0.03, ...spring }}
+                        onClick={() => setChanging(s)} aria-label={`${s.subjectName}, ${s.className}, ${s.time}`}
+                        className="group absolute inset-x-1 overflow-hidden rounded-lg p-1.5 text-left transition-shadow hover:shadow-pill"
+                        style={{ top, height, background: `color-mix(in oklab, ${s.hue} 14%, #fff)`, boxShadow: 'inset 0 1px 0 var(--glint)', borderLeft: `3px solid ${s.hue}` }}>
+                        <div className="font-mono text-[10px] font-500" style={{ color: 'var(--color-ink-2)' }}>{s.time}</div>
+                        <div className="truncate text-[12px] font-700 leading-tight">{s.subjectName}</div>
+                        <div className="truncate text-[10.5px] text-muted">{s.className}{s.room ? `, ${s.room}` : ''}</div>
+                      </motion.button>
+                    );
+                  })}
                 </div>
-              </section>
-            ))}
+              ))}
+            </div>
           </div>}
       <Sheet open={!!changing} onClose={() => setChanging(null)} labelledBy="lc-t">
         {changing && <LessonChangeForm lesson={changing} colleagues={t.colleagues} onClose={() => setChanging(null)} onSaved={() => { setChanging(null); reload(); }} />}
