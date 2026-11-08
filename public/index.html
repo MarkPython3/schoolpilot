@@ -2243,12 +2243,21 @@ function WhatINeed({ s, subject, avg, reload }) {
 }
 function AbsencesPanel({ s, reload }) {
   const a = s.absences;
+  const over = a.totUn >= a.threshold;
   return (
     <div>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Nemotivate" value={a.totUn} tone="#D92626" icon={<Icons.alert size={16} />} sub={`prag ${a.threshold} → scade purtarea`} />
-        <StatTile label="Motivate" value={a.totEx} tone="#16A34A" icon={<Icons.check size={16} />} />
-        <StatTile label="Total" value={a.totUn + a.totEx} tone="#5E6E6B" icon={<Icons.calendar size={16} />} />
+      <div className="mb-5 grid gap-3 lg:grid-cols-[minmax(230px,0.85fr)_1.1fr]">
+        <div className="window-light relative overflow-hidden rounded-xl2 border border-line p-5 shadow-card" style={{ background: 'var(--color-paper-2)' }}>
+          <p className="text-[12.5px] font-600 text-muted">Absențe nemotivate</p>
+          <div className="mt-2.5 flex items-end gap-2"><SplitFlap value={a.totUn} big /><span className="pb-1.5 text-[12.5px] text-muted">din {a.threshold}, pragul purtării</span></div>
+          <div className="mt-3.5 h-2 w-full overflow-hidden rounded-full bg-white/50">
+            <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: Math.min(1, a.totUn / a.threshold) }} transition={{ duration: .6, ease: [0.16, 1, 0.3, 1] }} style={{ transformOrigin: 'left' }} className={cx('h-full w-full rounded-full', over ? 'bg-heat-heavy' : 'bg-brand')} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <StatTile label="Motivate" value={a.totEx} tone="#16A34A" icon={<Icons.check size={16} />} />
+          <StatTile label="Total" value={a.totUn + a.totEx} tone="#5E6E6B" icon={<Icons.calendar size={16} />} />
+        </div>
       </div>
       {a.totUn >= 2 && <div className="mb-4 flex items-center gap-3 rounded-xl2 border border-heat-light/30 bg-heat-lightbg/60 p-3.5 text-sm"><Icons.alert size={18} className="shrink-0 text-heat-light" /><span className="text-ink/80">{a.totUn >= a.threshold
         ? <><b>Ai depășit pragul</b> de {a.threshold} absențe nemotivate care îți scade nota la purtare.</>
