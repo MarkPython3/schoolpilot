@@ -1710,6 +1710,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---------- danger: wipe everything ----------
         if p == "/api/reset" and method == "POST":
+            need(me, "admin")
+            if os.environ.get("ALLOW_RESET") != "1":
+                raise HttpError(403, "Resetarea este dezactivată pe acest server.")
             remove_users(con, con.execute("SELECT * FROM users WHERE role!='admin'").fetchall())
             for t in ["timetable", "assessments", "grades", "absences", "tasks", "notifications", "announcements", "announcement_reads", "school_modules", "lesson_changes", "subject_goals", "school_events", "messages", "classes", "schools"]:
                 con.execute("DELETE FROM %s" % t)
