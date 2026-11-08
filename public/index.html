@@ -838,29 +838,42 @@ function AdminSchools({ a, reload, onOpen }) {
 }
 
 function AdminSchool({ a, school, tab, setTab, back, reload }) {
-  const tabs = [
-    { id: 'classes', label: 'Clase', icon: <Icons.users size={15} /> },
-    { id: 'teachers', label: 'Profesori', icon: <Icons.teacher size={15} /> },
-    { id: 'students', label: 'Elevi', icon: <Icons.user size={15} /> },
-    { id: 'timetable', label: 'Orar', icon: <Icons.grid size={15} /> },
-    { id: 'announcements', label: 'Anunțuri', icon: <Icons.megaphone size={15} /> },
+  const sections = [
+    { id: 'classes', label: 'Clase', icon: Icons.users, count: school.classes.length },
+    { id: 'teachers', label: 'Profesori', icon: Icons.teacher, count: school.teachers.length },
+    { id: 'students', label: 'Elevi', icon: Icons.user, count: school.students.length },
+    { id: 'timetable', label: 'Orar', icon: Icons.grid },
+    { id: 'announcements', label: 'Anunțuri', icon: Icons.megaphone },
   ];
   return (
     <div>
       <button onClick={back} className="mb-3 inline-flex items-center gap-1 text-sm font-700 text-muted hover:text-ink"><Icons.chevL size={16} /> Toate școlile</button>
-      <div className="mb-4 flex flex-col gap-3">
-        <ViewHead title={school.name} sub="Construiește structura școlii" bare />
-        <div><FluidTabs id="admin" active={tab} onChange={setTab} tabs={tabs} fill /></div>
+      <ViewHead title={school.name} sub="Construiește structura școlii" bare />
+      <div className="mt-4 lg:hidden"><FluidTabs id="admin" active={tab} onChange={setTab} tabs={sections.map((t) => ({ id: t.id, label: t.label, icon: <t.icon size={15} /> }))} fill /></div>
+      <div className="mt-4 grid gap-5 lg:grid-cols-[216px_minmax(0,1fr)]">
+        <nav aria-label="Secțiuni" className="hidden lg:block">
+          <div className="sticky top-5 space-y-1">
+            {sections.map((t) => { const on = tab === t.id; return (
+              <button key={t.id} onClick={() => setTab(t.id)} className={cx('group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-700 transition-colors', on ? 'text-brand-700' : 'text-muted hover:bg-paper hover:text-ink')}>
+                {on && <motion.span layoutId="admin-rail" transition={spring} className="plastic absolute inset-0" style={{ '--t': 'var(--color-accent-soft)' }} />}
+                <span className="relative z-10"><t.icon size={18} /></span><span className="relative z-10 flex-1">{t.label}</span>
+                {t.count !== undefined && <span className="relative z-10 font-mono text-[12px] text-muted">{t.count}</span>}
+              </button>
+            ); })}
+          </div>
+        </nav>
+        <div className="min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .18 }}>
+              {tab === 'classes' && <AdminClasses school={school} reload={reload} />}
+              {tab === 'teachers' && <AdminTeachers a={a} school={school} reload={reload} />}
+              {tab === 'students' && <AdminStudents school={school} reload={reload} />}
+              {tab === 'timetable' && <AdminTimetable a={a} school={school} reload={reload} />}
+              {tab === 'announcements' && <Announcements school={school} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
-      <AnimatePresence mode="wait">
-        <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .18 }}>
-          {tab === 'classes' && <AdminClasses school={school} reload={reload} />}
-          {tab === 'teachers' && <AdminTeachers a={a} school={school} reload={reload} />}
-          {tab === 'students' && <AdminStudents school={school} reload={reload} />}
-          {tab === 'timetable' && <AdminTimetable a={a} school={school} reload={reload} />}
-          {tab === 'announcements' && <Announcements school={school} />}
-        </motion.div>
-      </AnimatePresence>
     </div>
   );
 }
