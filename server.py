@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SchoolPilot backend — zero dependencies (Python 3.8+ standard library only).
+Agendo backend — zero dependencies (Python 3.8+ standard library only).
 
 Multi-tenant: schools, classes, and three kinds of account (admin, teacher,
 student).  The database starts almost empty — only a single admin account is
@@ -474,7 +474,7 @@ def build_calendar(con, me):
     for e in con.execute("SELECT * FROM school_events WHERE school_id=? AND date>=?", (me["school_id"], iso(today()))).fetchall():
         entries.append(("e%d" % e["id"], e["date"], e["title"]))
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SchoolPilot//RO"]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Agendo//RO"]
     for uid, day, title in sorted(entries, key=lambda x: x[1]):
         start = parse_iso(day)
         lines += ["BEGIN:VEVENT", "UID:%s@schoolpilot" % uid, "DTSTAMP:%s" % stamp, "DTSTART;VALUE=DATE:%s" % start.strftime("%Y%m%d"),
@@ -1262,7 +1262,7 @@ def what_if(values, target, n):
 #  HTTP
 # --------------------------------------------------------------------------- #
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SchoolPilot/2.0"
+    server_version = "Agendo/2.0"
 
     def log_message(self, *a):
         pass
@@ -1315,7 +1315,7 @@ class Handler(BaseHTTPRequestHandler):
         info = token_identity(h[7:].strip())
         me = con.execute("SELECT * FROM users WHERE email=?", (info["email"],)).fetchone()
         if not me:
-            raise HttpError(403, "Acest email nu are cont în SchoolPilot.")
+            raise HttpError(403, "Acest email nu are cont în Agendo.")
         if me["role"] == "admin" and info["email"] != ADMIN_EMAIL:
             raise HttpError(403, "Nu ai acces la această acțiune.")
         if me["auth_id"] != info["auth_id"]:
@@ -1724,7 +1724,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     init_db()
     httpd = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print("SchoolPilot running on http://localhost:%d  (db: %s)" % (PORT, DB_PATH))
+    print("Agendo running on http://localhost:%d  (db: %s)" % (PORT, DB_PATH))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

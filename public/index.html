@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>SchoolPilot</title>
+<title>Agendo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -612,7 +612,7 @@ function AuthCard({ sub, children }) {
     <div className="min-h-screen" style={{ background: 'var(--color-paper)' }}>
       <div className="mx-auto min-h-screen w-full max-w-[1600px] lg:grid lg:grid-cols-[1.08fr_minmax(0,500px)]">
       <aside className="window-light relative hidden overflow-hidden px-12 py-12 xl:px-16 lg:flex lg:flex-col lg:justify-between" style={{ background: 'var(--color-paper-2)' }}>
-        <div className="relative flex items-center gap-3"><Logo size={40} /><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p></div>
+        <div className="relative flex items-center gap-3"><Logo size={40} /><p className="font-display text-xl font-800 tracking-tight">Agendo</p></div>
         <div className="relative max-w-xl">
           <h1 className="font-display font-700 leading-[1.03]" style={{ fontSize: 'clamp(2.4rem, 3.4vw, 3.4rem)' }}>Săptămâna ta de școală, pusă în ordine dinainte.</h1>
           <p className="mt-4 max-w-md text-[15.5px] text-muted">Orar, note, teme și evaluări, toate într-un singur loc — calm, clar, al tău.</p>
@@ -623,7 +623,7 @@ function AuthCard({ sub, children }) {
       <main className="flex min-h-screen flex-col justify-center px-6 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-7 flex items-center gap-3 lg:hidden">
-            <Logo size={42} /><div><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">{sub}</p></div>
+            <Logo size={42} /><div><p className="font-display text-xl font-800 tracking-tight">Agendo</p><p className="text-[13px] text-muted">{sub}</p></div>
           </div>
           {children}
         </div>
@@ -727,7 +727,7 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
       <div className="graph-paper daylight min-h-screen">
         <div className="flex">
           <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 flex-col border-r border-line bg-white/70 px-3 py-5 backdrop-blur lg:flex">
-            <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2.5 px-2 text-left"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">SchoolPilot</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></button>
+            <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2.5 px-2 text-left"><Logo /><div className="leading-none"><p className="font-display text-lg font-800 tracking-tight">Agendo</p><p className="mt-0.5 text-[11px] text-muted">{roleLabel}</p></div></button>
             <nav className="mt-7 flex flex-col gap-1">
               {nav.map((n) => { const on = !profile && view === n.id; return (
                 <button key={n.id} onClick={() => go(n.id)} className={cx('group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14.5px] font-700 transition-colors', on ? 'text-brand-600' : 'text-muted hover:bg-paper hover:text-ink')}>
@@ -747,7 +747,7 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
 
           <main className="min-w-0 flex-1">
             <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-              <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></button>
+              <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">Agendo</span></button>
               <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
             </header>
             <AnimatePresence mode="wait">
@@ -1629,7 +1629,7 @@ function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) 
   return (
     <Modal>
       <h3 id="a-t" className="font-display text-xl font-700">Programează o evaluare · {className}</h3>
-      <p className="mt-1 text-sm text-muted">SchoolPilot îți arată zilele cele mai libere ale clasei.</p>
+      <p className="mt-1 text-sm text-muted">Agendo îți arată zilele cele mai libere ale clasei.</p>
       <div className="mt-4 space-y-4">
         <Field label="Materie"><SubjectSelect subjects={mySubs.length ? mySubs : t.subjectCatalog} value={subject} onChange={setSubject} /></Field>
         <div><span className="mb-1 block text-[12px] font-700 text-muted">Tip</span>
@@ -2151,7 +2151,7 @@ function GradesPanel({ s, reload }) {
         </div>
       )}
       {g.subjects.length > 0 && <PickChips label="Perioada" options={[{ id: 0, label: 'Tot anul' }, ...g.modules.map((n) => ({ id: n, label: `M${n}` }))]} value={mod} onChange={setMod} />}
-      {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Notele apar aici când le introduc profesorii. SchoolPilot îți calculează mediile și de ce notă mai ai nevoie." />
+      {g.subjects.length === 0 ? <Empty icon={<Icons.chart size={26} />} title="Încă nu ai note" body="Notele apar aici când le introduc profesorii. Agendo îți calculează mediile și de ce notă mai ai nevoie." />
         : subjects.length === 0 ? <p className="rounded-xl2 border border-line bg-white p-6 text-center text-[13px] text-muted">Nicio notă în modulul {mod}.</p>
         : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {subjects.map((sub) => (

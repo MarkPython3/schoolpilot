@@ -1,4 +1,4 @@
-# SchoolPilot
+# Agendo
 
 **The app that stops your school week from ambushing you.**
 
