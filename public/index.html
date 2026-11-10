@@ -117,6 +117,12 @@
   }
   @keyframes daydrift { from { transform: translate3d(-4%,0,0) skewX(-9deg); } to { transform: translate3d(6%,0,0) skewX(-9deg); } }
   @media (prefers-reduced-motion: reduce) { .window-light::before, .daylight::before { animation: none; } }
+  /* apple-design §14: when the user asks for less transparency, make translucent materials solid and drop the blur */
+  @media (prefers-reduced-transparency: reduce) {
+    .backdrop-blur, .backdrop-blur-sm, .backdrop-blur-md { backdrop-filter: none !important; }
+    .bg-white\/70, .bg-white\/80, .bg-white\/90 { background-color: #fff !important; }
+    .bg-ink\/40 { background-color: rgba(23, 35, 29, 0.8) !important; }
+  }
 </style>
 </head>
 <body>
@@ -127,7 +133,9 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const Mo = window.Motion || {};
 const motion = Mo.motion, AnimatePresence = Mo.AnimatePresence, MotionConfig = Mo.MotionConfig;
 const useReducedMotion = Mo.useReducedMotion || (() => false);
-const spring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 };
+const spring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 };        // default UI: near-critically damped, no distracting bounce
+const springBounce = { type: 'spring', stiffness: 420, damping: 26, mass: 0.9 };  // momentum interactions (flick / drag release): a little overshoot
+const SheetCtx = React.createContext(null);  // Sheet hands its onClose to the draggable Modal inside it (drag-to-dismiss)
 const cx = (...a) => a.filter(Boolean).join(' ');
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`; // Romanian singular/plural
 const DAYS = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri'];
@@ -251,15 +259,29 @@ function Sheet({ open, onClose, children, labelledBy }) {
     <AnimatePresence>{open && (
       <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-sm" />
-        {children}
+        <SheetCtx.Provider value={onClose}>{children}</SheetCtx.Provider>
       </div>
     )}</AnimatePresence>
   );
 }
 function Modal({ children, wide }) {
-  return <motion.div initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: .98 }} transition={spring}
-    className={cx('relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2', wide ? 'max-w-lg' : 'max-w-md')}>
-    <div className="h-1.5 w-10 mx-auto mb-4 rounded-full bg-line sm:hidden" />{children}</motion.div>;
+  // Apple-style bottom sheet: grab the handle and drag down to dismiss. Motion tracks the finger
+  // 1:1, rubber-bands at the top, and on release uses offset+velocity to decide dismiss vs. snap
+  // back (§2,3,6,9 of the apple-design skill). Only the handle starts the drag, so inner scrolling
+  // never fights it. Desktop (no handle) and reduced-motion fall back to the plain modal.
+  const onClose = React.useContext(SheetCtx);
+  const reduce = useReducedMotion();
+  const controls = Mo.useDragControls ? Mo.useDragControls() : null;
+  const draggable = !!(onClose && controls && !reduce);
+  return <motion.div
+      initial={{ opacity: 0, y: 24, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 80, scale: .98 }} transition={spring}
+      drag={draggable ? 'y' : false} dragControls={draggable ? controls : undefined} dragListener={false}
+      dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.6 }} dragTransition={springBounce}
+      onDragEnd={draggable ? (e, info) => { if (info.offset.y > 120 || info.velocity.y > 550) onClose(); } : undefined}
+      className={cx('relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-xl2 bg-white p-6 shadow-lift sm:rounded-xl2', wide ? 'max-w-lg' : 'max-w-md')}>
+    <div onPointerDown={draggable ? (e) => controls.start(e) : undefined}
+      className={cx('mx-auto mb-4 h-1.5 w-10 rounded-full bg-line sm:hidden', draggable && 'cursor-grab touch-none active:cursor-grabbing')} />
+    {children}</motion.div>;
 }
 /* Toasts (after Watermelon's soft Sonner variants). Call toast.success / .error / .info from anywhere. */
 let pushToast = () => {};
@@ -2176,7 +2198,8 @@ function GradesPanel({ s, reload }) {
 function GoalRow({ sub, reload }) {
   const goal = sub.goal;
   const change = (e) => API.post('/api/goals', { subject: sub.code, target: e.target.value ? Number(e.target.value) : null }).then(reload).catch(toastError);
-  const status = !goal ? null : goal.reached ? 'Atins' : !goal.reachable ? 'Greu de atins cu o singură notă' : `Îți trebuie cel puțin ${goal.need} la nota următoare`;
+  const reached = goal && (goal.reached || goal.already);
+  const status = !goal ? null : reached ? 'Atins' : goal.count === 1 ? 'Îți mai trebuie o notă de 10' : `Îți mai trebuie ${goal.count} note de 10`;
   return (
     <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
       <label className="flex items-center gap-1.5 font-700 text-muted">Obiectiv
@@ -2184,7 +2207,7 @@ function GoalRow({ sub, reload }) {
           <option value="">—</option>{[5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
-      {status && <span className={goal.reached ? 'font-700 text-heat-calm' : 'text-muted'}>{status}</span>}
+      {status && <span className={reached ? 'font-700 text-heat-calm' : 'text-muted'}>{status}</span>}
     </div>
   );
 }
@@ -2223,20 +2246,21 @@ function GradeChips({ values }) {
 }
 function WhatINeed({ s, subject, avg, reload }) {
   const [target, setTarget] = useState(Math.min(10, Math.ceil(avg) + 1));
-  const [n, setN] = useState(1);
+  const [grade, setGrade] = useState(10);
   const [res, setRes] = useState(null);
-  useEffect(() => { const id = setTimeout(() => { API.post('/api/grades/what-if', { subject, target, n }).then(setRes).catch(toastError); }, 160); return () => clearTimeout(id); }, [subject, target, n]);
+  useEffect(() => { const id = setTimeout(() => { API.post('/api/grades/what-if', { subject, target, grade }).then(setRes).catch(toastError); }, 160); return () => clearTimeout(id); }, [subject, target, grade]);
+  const tone = res && (res.already ? 'bg-heat-calmbg text-heat-calm' : !res.reachable ? 'bg-heat-heavybg text-heat-heavy' : 'bg-brand-50 text-brand-700');
   return (
     <div>
-      <p className="flex items-center gap-2 text-sm font-700"><Icons.target size={16} className="text-brand" /> De ce notă ai nevoie?</p>
+      <p className="flex items-center gap-2 text-sm font-700"><Icons.target size={16} className="text-brand" /> De câte note ai nevoie?</p>
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <div><label className="text-[12px] text-muted">Media dorită</label><div className="mt-1"><Stepper value={target} set={setTarget} /></div></div>
-        <div><label className="text-[12px] text-muted">Note rămase</label><div className="mt-1"><Stepper value={n} set={setN} max={5} /></div></div>
+        <div><label className="text-[12px] text-muted">Dacă iei note de</label><div className="mt-1"><Stepper value={grade} set={setGrade} /></div></div>
       </div>
-      {res && <motion.div key={`${target}-${n}-${res.reachable}-${res.trivial}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cx('mt-4 rounded-xl p-3.5 text-sm', !res.reachable ? 'bg-heat-heavybg text-heat-heavy' : res.trivial ? 'bg-heat-calmbg text-heat-calm' : 'bg-brand-50 text-brand-700')}>
-        {!res.reachable ? <span>Media <b>{target}</b> nu mai e posibilă cu {n} {n === 1 ? 'notă' : 'note'} — ar trebui peste 10.</span>
-          : res.trivial ? <span>Ești deja acolo. Chiar și o notă mică îți păstrează media <b>{target}</b>.</span>
-          : <span>Ai nevoie de minim <b className="font-display text-base">{res.need}</b> la {n === 1 ? 'următoarea notă' : `fiecare din următoarele ${n} note`} ca să ajungi la media <b>{target}</b>.</span>}
+      {res && <motion.div key={`${target}-${grade}-${res.already}-${res.reachable}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cx('mt-4 rounded-xl p-3.5 text-sm', tone)}>
+        {res.already ? <span>Ești deja la media <b>{target}</b> sau peste — nu mai ai nevoie de nicio notă.</span>
+          : !res.reachable ? <span>Cu note de <b>{grade}</b> nu ajungi niciodată la media <b>{target}</b>, oricâte ai lua. Ai nevoie de note de cel puțin <b>{target}</b>.</span>
+          : <span>Ai nevoie de încă <b className="font-display text-base">{res.count}</b> {res.count === 1 ? 'notă' : 'note'} de <b>{grade}</b> ca să ajungi la media <b>{target}</b>.</span>}
       </motion.div>}
     </div>
   );

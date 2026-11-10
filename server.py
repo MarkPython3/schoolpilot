@@ -1222,7 +1222,7 @@ def build_grades(con, student_id):
         target = goals.get(sub["code"])
         if target:
             sub["goal"] = {"target": target, "reached": sub["annual"] >= target,
-                           **what_if([v["v"] for v in sub["values"]], target, 1)}
+                           **grades_needed([v["v"] for v in sub["values"]], target, 10)}
     subs.sort(key=lambda s: s["name"])
     overall = round(sum(s["annual"] for s in subs) / len(subs), 2) if subs else 0  # mean of the rounded annual averages
     best = max(subs, key=lambda s: s["avg"]) if subs else None
@@ -1257,6 +1257,25 @@ def what_if(values, target, n):
     num = (2 * target - 1) * total - 2 * sum(values)
     need = -(-num // (2 * n))  # ceil
     return {"need": min(10, max(1, need)), "reachable": need <= 10, "trivial": need <= 1}
+
+def grades_needed(values, target, grade):
+    """How many future grades of value `grade` are needed for the subject average to
+    round (half-up) to `target`. Grades are unbounded — no cap on how many you may get.
+
+    Returns the minimum count, `already` when the average is already there, or
+    `reachable=False` when `grade` is too low to ever reach the target (as the count
+    grows, the average only tends toward `grade`, so `grade` must clear `target`).
+    """
+    target = max(1, min(10, int(target)))
+    grade = max(1, min(10, int(grade)))
+    n0, s = len(values), sum(values)
+    th2 = 2 * target - 1                       # need 2*average >= th2  (half-up rounding)
+    if n0 and 2 * s >= th2 * n0:               # average already rounds to >= target
+        return {"count": 0, "already": True, "reachable": True, "target": target, "grade": grade}
+    if 2 * grade <= th2:                        # grade not above the target threshold -> never reaches
+        return {"count": None, "already": False, "reachable": False, "target": target, "grade": grade}
+    k = -(-(th2 * n0 - 2 * s) // (2 * grade - th2))  # ceil(num/den), both > 0 here
+    return {"count": int(max(1, k)), "already": False, "reachable": True, "target": target, "grade": grade}
 
 # --------------------------------------------------------------------------- #
 #  HTTP
@@ -1634,7 +1653,7 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/grades/what-if" and method == "POST":
             rows = con.execute("SELECT value FROM grades WHERE student_id=? AND subject=?",
                                (me["id"], body["subject"])).fetchall()
-            return what_if([r["value"] for r in rows], float(body.get("target", 8)), int(body.get("n", 1)))
+            return grades_needed([r["value"] for r in rows], int(body.get("target", 8)), int(body.get("grade", 10)))
 
         # ---------- teacher: grades ----------
         if p == "/api/grades" and method == "POST":
