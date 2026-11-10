@@ -1980,17 +1980,22 @@ function StudentToday({ s, reload, onGoto }) {
   if (!s.student.classId) return <div><ViewHead title={`Bună, ${s.student.name.split(' ')[0]}`} icon={<Icons.sun />} /><Empty icon={<Icons.sun size={26} />} title="Încă nu ești într-o clasă" body="Administratorul te repartizează la o clasă și îți adaugă orarul. Apoi aici apare rezumatul zilei tale." /></div>;
   return (
     <div>
-      <motion.header {...stagger(0)} className="mb-6 flex items-center gap-3.5">
-        <span className="plastic hidden h-12 w-12 place-items-center text-brand-700 sm:grid" style={{ '--t': 'var(--color-accent-soft)' }}><Icons.sun size={22} /></span>
-        <div className="min-w-0">
-          <h1 className="font-display text-[26px] font-700 leading-[1.05] tracking-[-0.01em] sm:text-[32px]">Azi</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-muted">
-            <span className="font-mono">{t.dateLabel}</span>
-            <span className="text-line" aria-hidden="true">·</span>
-            <span className="font-600 text-ink">{s.student.class}</span>
-            <span className="text-line" aria-hidden="true">·</span>
-            <span>{t.classes.length ? plural(t.classes.length, 'oră', 'ore') : 'liber'}{t.due.length > 0 ? `, ${t.due.length} de predat` : ''}</span>
-          </p>
+      <motion.header {...stagger(0)} className="mb-6">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[12.5px] font-500 text-muted">
+          <span className="inline-flex items-center gap-1.5 text-brand-700"><Icons.sun size={14} /> {t.dateLabel}</span>
+          <span className="text-line" aria-hidden="true">·</span>
+          <span className="plastic px-2 py-0.5 text-[11.5px] font-600 text-brand-700" style={{ '--t': 'var(--color-accent-soft)', borderRadius: 999 }}>{s.student.class}</span>
+        </div>
+        <h1 className="mt-2 font-display text-[40px] font-700 leading-[0.95] tracking-[-0.03em] sm:text-[52px]">Azi</h1>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
+          <span className="inline-flex items-baseline gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 font-600 text-brand-700 ring-1 ring-brand-100">
+            <span className="font-display text-[15px] font-700 leading-none">{t.classes.length}</span> {t.classes.length === 1 ? 'oră azi' : 'ore azi'}
+          </span>
+          {t.due.length > 0 && (
+            <span className="inline-flex items-baseline gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 font-600 text-ink shadow-card">
+              <span className="font-display text-[15px] font-700 leading-none">{t.due.length}</span> de predat
+            </span>
+          )}
         </div>
       </motion.header>
 
