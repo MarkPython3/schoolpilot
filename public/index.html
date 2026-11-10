@@ -123,6 +123,21 @@
     .bg-white\/70, .bg-white\/80, .bg-white\/90 { background-color: #fff !important; }
     .bg-ink\/40 { background-color: rgba(23, 35, 29, 0.8) !important; }
   }
+  /* apple-design §1: kill the ~300ms tap delay, and give every press instant, eased feedback.
+     The :not([style*=transform]) guard excludes Motion-driven buttons (they carry an inline
+     transform) so the CSS transition never fights Motion's per-frame updates. */
+  button, a, [role="button"], label, summary { touch-action: manipulation; }
+  button:not([style*="transform"]) { transition: transform 110ms ease-out; }
+  button:not(:disabled):active { transform: scale(0.98); }
+  /* apple-design §12: a soft scroll-edge fade where floating chrome meets content, not a hard 1px rule */
+  .edge-b, .edge-t { position: relative; }
+  .edge-b::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(to bottom, rgba(23,35,29,.06), transparent); pointer-events: none; }
+  .edge-t::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 14px; background: linear-gradient(to top, rgba(23,35,29,.06), transparent); pointer-events: none; }
+  /* apple-design §15: tracking is size-specific — tighten large/display text, leave body near 0 */
+  body { font-optical-sizing: auto; }
+  .font-display { letter-spacing: -0.012em; }
+  .text-xl { letter-spacing: -0.015em; }
+  .text-2xl, .text-3xl, .text-4xl, .text-5xl { letter-spacing: -0.022em; }
 </style>
 </head>
 <body>
@@ -380,6 +395,7 @@ function SearchSelect({ value, onChange, options, placeholder, searchPlaceholder
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
+  const reduceSS = useReducedMotion();
   const root = useRef(null);
   const trigger = useRef(null);
   const needle = plainText(q.trim());
@@ -407,8 +423,9 @@ function SearchSelect({ value, onChange, options, placeholder, searchPlaceholder
         <span className={cx('min-w-0 truncate', !current && 'text-muted')}>{current ? current.label : placeholder}</span>
         <Icons.chevD size={16} className="shrink-0 text-muted" />
       </button>
-      {open && (
-        <div className={cx('w-full overflow-hidden rounded-xl border border-line bg-white shadow-lift', inline ? 'mt-1.5' : 'absolute z-30 mt-1.5')}>
+      <AnimatePresence>{open && (
+        <motion.div initial={reduceSS ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={reduceSS ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -4 }} transition={spring} style={{ transformOrigin: 'top' }}
+          className={cx('w-full overflow-hidden rounded-xl border border-line bg-white shadow-lift', inline ? 'mt-1.5' : 'absolute z-30 mt-1.5')}>
           <div className="flex items-center gap-2 border-b border-line px-3">
             <Icons.search size={15} className="shrink-0 text-muted" />
             <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setActive(0); }} onKeyDown={onKey} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none" />
@@ -423,8 +440,8 @@ function SearchSelect({ value, onChange, options, placeholder, searchPlaceholder
               </button>
             ))}
           </div>
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
     </div>
   );
 }
@@ -768,7 +785,7 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
           </aside>
 
           <main className="min-w-0 flex-1">
-            <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+            <header className="edge-b sticky top-0 z-30 flex items-center justify-between bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
               <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></button>
               <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
             </header>
@@ -781,7 +798,7 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
         </div>
 
         {nav.length > 1 && (
-          <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/90 backdrop-blur lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <nav className="edge-t fixed inset-x-0 bottom-0 z-30 bg-white/90 backdrop-blur lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="mx-auto flex max-w-md items-stretch justify-around px-1 py-1.5">
               {nav.map((n) => { const on = !profile && view === n.id; return (
                 <button key={n.id} onClick={() => go(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
