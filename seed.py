@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fill the Agendo database with a demo school.
+Fill the SchoolPilot database with a demo school.
 
 WIPES the existing data first (everything except the admin account), then adds:
 class 10B with 25 students, 8 teachers, a full Mon-Fri timetable, an upcoming

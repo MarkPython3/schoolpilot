@@ -35,4 +35,4 @@ Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called
 
 - All UI text is Romanian with correct diacritics (ă â î ș ț). Keep it that way.
 - Romanian averages round to whole numbers, with x.50 rounding up.
-- The app is named "Agendo"; don't rebrand or restyle without being asked.
+- "SchoolPilot" is a placeholder name; don't rebrand or restyle without being asked.
