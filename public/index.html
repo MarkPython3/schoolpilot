@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>SchoolPilot</title>
+<meta name="description" content="SchoolPilot — orarul, notele, temele și evaluările clasei tale, într-un singur loc. Pentru elevi, profesori și administratori." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -57,13 +58,16 @@
     --p-fri: oklch(87% 0.048 210); --p-sat: oklch(84% 0.045 270); --p-sun: oklch(84% 0.048 322);
     --light: oklch(99.4% 0.016 84); --glint: oklch(100% 0 0);
     --radius-card: 14px; --radius-input: 10px;
+    --font-display: "Schibsted Grotesk", ui-sans-serif, sans-serif;
+    --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "DM Mono", ui-monospace, monospace;
   }
   html, body { overflow-x: clip; }
   html { -webkit-text-size-adjust: 100%; }
-  body { font-family: "Instrument Sans", ui-sans-serif, system-ui, sans-serif; background: var(--color-paper); color: var(--color-ink); -webkit-font-smoothing: antialiased; }
-  .font-display { font-family: "Schibsted Grotesk", ui-sans-serif, sans-serif; letter-spacing: -0.03em; font-synthesis: none; }
+  body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); -webkit-font-smoothing: antialiased; }
+  .font-display { font-family: var(--font-display); letter-spacing: -0.03em; font-synthesis: none; }
   .font-mono, .tnum.tnum { } /* keep selector weight */
-  .font-mono { font-family: "DM Mono", ui-monospace, monospace; }
+  .font-mono { font-family: var(--font-mono); }
   .tnum { font-variant-numeric: tabular-nums; }
   /* warm morning paper with a fine fibre grain (feTurbulence), under every full-bleed ground */
   .graph-paper {
@@ -100,11 +104,13 @@
   .highlight { background: linear-gradient(104deg, color-mix(in oklab, var(--color-accent-soft) 0%, transparent) .3%, var(--color-accent-soft) 2.4%, color-mix(in oklab, var(--color-accent-soft) 80%, transparent) 95%, transparent 99%);
     border-radius: .3em; padding: 0 .14em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: #c2cdbf; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
-  ::-webkit-scrollbar-thumb:hover { background: #a9b7a4; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--color-ink) 22%, transparent); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--color-ink) 33%, transparent); background-clip: content-box; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   *:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: color-mix(in oklab, var(--color-accent) 24%, transparent); }
+  input, textarea, [contenteditable] { caret-color: var(--color-accent); }
   /* daylight: faint window light drifting across the whole app, behind the content */
   .daylight { isolation: isolate; }
   .daylight::before {
@@ -120,8 +126,8 @@
   /* apple-design §14: when the user asks for less transparency, make translucent materials solid and drop the blur */
   @media (prefers-reduced-transparency: reduce) {
     .backdrop-blur, .backdrop-blur-sm, .backdrop-blur-md { backdrop-filter: none !important; }
-    .bg-white\/70, .bg-white\/80, .bg-white\/90 { background-color: #fff !important; }
-    .bg-ink\/40 { background-color: rgba(23, 35, 29, 0.8) !important; }
+    .bg-white\/70, .bg-white\/80, .bg-white\/90 { background-color: var(--glint) !important; }
+    .bg-ink\/40 { background-color: color-mix(in oklab, var(--color-ink) 80%, transparent) !important; }
   }
   /* apple-design §1: kill the ~300ms tap delay, and give every press instant, eased feedback.
      The :not([style*=transform]) guard excludes Motion-driven buttons (they carry an inline
@@ -131,8 +137,8 @@
   button:not(:disabled):active { transform: scale(0.98); }
   /* apple-design §12: a soft scroll-edge fade where floating chrome meets content, not a hard 1px rule */
   .edge-b, .edge-t { position: relative; }
-  .edge-b::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(to bottom, rgba(23,35,29,.06), transparent); pointer-events: none; }
-  .edge-t::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 14px; background: linear-gradient(to top, rgba(23,35,29,.06), transparent); pointer-events: none; }
+  .edge-b::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 6%, transparent), transparent); pointer-events: none; }
+  .edge-t::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 14px; background: linear-gradient(to top, color-mix(in oklab, var(--color-ink) 6%, transparent), transparent); pointer-events: none; }
   /* apple-design §15: tracking is size-specific — tighten large/display text, leave body near 0 */
   body { font-optical-sizing: auto; }
   .font-display { letter-spacing: -0.012em; }
@@ -853,7 +859,7 @@ function AdminSchools({ a, reload, onOpen }) {
       {a.schools.length === 0 && !adding && <Empty icon={<Icons.building size={26} />} title="Nicio școală încă" body="Începe prin a adăuga prima școală. Totul pornește de la zero — tu construiești structura." />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {a.schools.map((s) => (
-          <div key={s.id} className="group rounded-xl2 border border-line bg-white p-5 shadow-card transition-all hover:border-brand-200">
+          <div key={s.id} className="group rounded-xl2 border border-line bg-white p-5 shadow-card transition-colors hover:border-brand-200">
             <div className="flex items-start justify-between">
               <button onClick={() => onOpen(s.id)} className="flex items-center gap-3 text-left">
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand"><Icons.building size={22} /></span>
