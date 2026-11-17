@@ -2013,23 +2013,31 @@ function StudentToday({ s, reload, onGoto }) {
           </div>
           {t.classes.length === 0
             ? <p className="py-6 text-[14px] text-muted">{t.module.holiday ? (t.module.resumes ? `E vacanță. Cursurile reîncep pe ${t.module.resumes}.` : 'E vacanță.') : 'Nicio oră azi.'}</p>
-            : <ul className="divide-y divide-line border-y border-line">
-                {t.classes.map((c, i) => (
-                  <motion.li key={i} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.04, ...spring }}
-                    className={cx('relative flex items-center gap-4 py-3.5 pl-3 pr-1', c.current && 'bg-brand-50')}>
-                    {c.current && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-brand" aria-hidden="true" />}
-                    <div className="w-12 shrink-0 font-mono leading-tight tnum">
-                      <div className="text-[14px] font-500 text-ink">{c.time}</div><div className="text-[11px] text-muted">{c.end}</div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2"><Dot hue={c.hue} /><span className={cx('min-w-0 truncate font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'text-muted line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
-                      {c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}
-                      {c.teacher && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.teacher}</div>}
-                    </div>
-                    <span className="shrink-0 text-[13px] font-600 text-muted">{c.room || '—'}</span>
-                  </motion.li>
-                ))}
-              </ul>}
+            : <>
+                <div className="mb-4 flex gap-1" aria-hidden="true">
+                  {t.classes.map((c, i) => (
+                    <motion.div key={i} initial={reduce ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.08 + i * 0.05, ...spring }}
+                      className={cx('h-2 flex-1 rounded-full', c.current && 'ring-2 ring-offset-2 ring-brand')} style={{ background: c.hue, transformOrigin: 'left', opacity: c.current ? 1 : 0.82 }} title={`${c.time} · ${c.subjectName}`} />
+                  ))}
+                </div>
+                <ul className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
+                  {t.classes.map((c, i) => (
+                    <motion.li key={i} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + i * 0.045, ...spring }}
+                      className={cx('relative flex items-center gap-4 py-3.5 pl-5 pr-4', i > 0 && 'border-t border-line', c.current && 'bg-brand-50')}>
+                      <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: c.hue }} aria-hidden="true" />
+                      <div className="w-12 shrink-0 font-mono leading-tight tnum">
+                        <div className="text-[14px] font-600 text-ink">{c.time}</div><div className="text-[11px] text-muted">{c.end}</div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2"><span className={cx('min-w-0 truncate text-[15px] font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'text-muted line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
+                        {c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}
+                        {c.teacher && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.teacher}</div>}
+                      </div>
+                      <span className="shrink-0 rounded-lg bg-paper px-2.5 py-1 text-[12.5px] font-600" style={{ color: 'var(--color-ink-2)' }}>{c.room || '—'}</span>
+                    </motion.li>
+                  ))}
+                </ul>
+              </>}
         </motion.section>
 
         <motion.div {...stagger(2)} className="flex flex-col">
