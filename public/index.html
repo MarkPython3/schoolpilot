@@ -2344,12 +2344,18 @@ function Root() {
   };
   useEffect(() => {
     onUnauthorized = () => { if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.'); };
+    // Never trap the user on the boot spinner: if the session check or /api/me stalls — e.g. a
+    // stored token that can't reach Supabase — fall back to the login screen after a short guard.
+    let settled = false;
+    const done = () => { settled = true; };
+    const guard = setTimeout(() => { if (!settled) { done(); toLogin(); } }, 9000);
     fetch('/api/config').then((r) => r.json()).then(async (cfg) => {
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
       const { data } = await sb.auth.getSession();
-      if (!data.session) return toLogin();
-      loadMe().catch((e) => toLogin(errText(e)));
-    }).catch((e) => { setNotice(errText(e)); setPhase('error'); });
+      if (!data.session) { done(); return toLogin(); }
+      try { await loadMe(); } catch (e) { toLogin(errText(e)); } finally { done(); }
+    }).catch((e) => { done(); setNotice(errText(e)); setPhase('error'); });
+    return () => clearTimeout(guard);
   }, []);
   if (phase === 'boot') return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
   if (phase === 'error') return <AuthCard sub="Autentificare"><FormError>Nu pot contacta serverul: {notice}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</FormError></AuthCard>;
