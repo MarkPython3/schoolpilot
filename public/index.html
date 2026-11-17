@@ -2005,36 +2005,39 @@ function StudentToday({ s, reload, onGoto }) {
           <p className="min-w-0 text-sm"><b className="font-700">{t.forecast.text}</b> {t.forecast.advice}</p>
         </motion.section>
       )}
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <motion.section {...stagger(1)} className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-xl font-700">Programul de azi</h2>{t.isWeekend && <Pill>previzualizare luni</Pill>}</div>
-          {t.classes.length === 0 ? <p className="rounded-xl2 border border-line bg-white p-5 text-center text-[13px] text-muted shadow-card">{t.module.holiday ? (t.module.resumes ? `E vacanță. Cursurile reîncep pe ${t.module.resumes}.` : 'E vacanță.') : 'Nicio oră azi.'}</p>
-            : <ul className="space-y-2">
+      <div className="mt-6 grid grid-cols-1 gap-x-14 gap-y-9 lg:grid-cols-[minmax(0,560px)_300px]">
+        <motion.section {...stagger(1)} className="lg:max-w-[640px]">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="font-display text-xl font-700">Programul de azi</h2>
+            {t.isWeekend && <span className="text-[12.5px] font-600 text-muted">previzualizare luni</span>}
+          </div>
+          {t.classes.length === 0
+            ? <p className="py-6 text-[14px] text-muted">{t.module.holiday ? (t.module.resumes ? `E vacanță. Cursurile reîncep pe ${t.module.resumes}.` : 'E vacanță.') : 'Nicio oră azi.'}</p>
+            : <ul className="divide-y divide-line border-y border-line">
                 {t.classes.map((c, i) => (
-                  <motion.li key={i} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + i * 0.05, ...spring }}
-                    className="plastic flex items-stretch gap-3 p-2.5 pr-3" style={{ '--t': c.current ? 'var(--color-accent-soft)' : 'var(--color-paper-3)' }}>
-                    <div className="grid w-16 shrink-0 content-center rounded-lg py-1.5 text-center font-mono leading-tight" style={{ background: 'rgba(255,255,255,.62)', color: 'var(--color-ink-2)' }}>
-                      <div className="text-[14px] font-500">{c.time}</div><div className="text-[10.5px] opacity-65">{c.end}</div>
+                  <motion.li key={i} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.04, ...spring }}
+                    className={cx('relative flex items-center gap-4 py-3.5 pl-3 pr-1', c.current && 'bg-brand-50')}>
+                    {c.current && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-brand" aria-hidden="true" />}
+                    <div className="w-12 shrink-0 font-mono leading-tight tnum">
+                      <div className="text-[14px] font-500 text-ink">{c.time}</div><div className="text-[11px] text-muted">{c.end}</div>
                     </div>
-                    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2"><Dot hue={c.hue} /><span className={cx('min-w-0 truncate font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
-                        {c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}
-                        {c.teacher && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.teacher}</div>}
-                      </div>
-                      <span className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-700" style={{ background: 'rgba(255,255,255,.72)', color: 'var(--color-ink-2)' }}>{c.room || '—'}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2"><Dot hue={c.hue} /><span className={cx('min-w-0 truncate font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'text-muted line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
+                      {c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}
+                      {c.teacher && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.teacher}</div>}
                     </div>
+                    <span className="shrink-0 text-[13px] font-600 text-muted">{c.room || '—'}</span>
                   </motion.li>
                 ))}
               </ul>}
         </motion.section>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-            <h2 className="mb-3 font-display text-lg font-700">De predat curând</h2>
-            <ul className="space-y-1">
+        <motion.div {...stagger(2)} className="flex flex-col">
+          <section className="border-t border-line pt-6 first:border-t-0 first:pt-0">
+            <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">De predat curând</h2>
+            <ul className="-mx-2 space-y-0.5">
               <AnimatePresence initial={false}>
-                {t.due.length === 0 && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl bg-paper p-3 text-center text-[13px] text-muted">Nimic urgent — zi liniștită.</motion.li>}
+                {t.due.length === 0 && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-2 py-1 text-[13px] text-muted">Nimic urgent — zi liniștită.</motion.li>}
                 {t.due.map((task) => (
                   <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                     {task.kind === 'task'
@@ -2048,56 +2051,56 @@ function StudentToday({ s, reload, onGoto }) {
                 ))}
               </AnimatePresence>
             </ul>
-          </motion.section>
+          </section>
           {t.changes.length > 0 && (
-            <motion.section {...stagger(2)} className="rounded-xl2 border border-heat-busy/30 bg-white p-5 shadow-card">
-              <h2 className="mb-2 font-display text-lg font-700">Schimbări în orar</h2>
+            <section className="mt-6 border-t border-line pt-6">
+              <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">Schimbări în orar</h2>
               <ul className="space-y-2">{t.changes.map((c) => <li key={c.id} className="min-w-0"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
-            </motion.section>
+            </section>
           )}
           {t.excuseDue.length > 0 && (
-            <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-              <h2 className="font-display text-lg font-700">Adu scutirea</h2>
-              <p className="mb-2 text-[12.5px] text-muted">Absențe nemotivate recente. Verifică termenul cu dirigintele.</p>
+            <section className="mt-6 border-t border-line pt-6">
+              <h2 className="text-[13.5px] font-700 text-muted">Adu scutirea</h2>
+              <p className="mb-2 mt-1 text-[12.5px] text-muted">Absențe nemotivate recente. Verifică termenul cu dirigintele.</p>
               <ul className="space-y-1.5">{t.excuseDue.map((a) => <li key={a.id} className="text-sm"><b className="font-700">{a.subjectName}</b>, {fmtDate(a.date)}: până pe {fmtDate(a.until)}</li>)}</ul>
-            </motion.section>
+            </section>
           )}
           {t.nextDay && (
-            <motion.section {...stagger(2)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-              <h2 className="font-display text-lg font-700">{t.nextDay.label}</h2>
-              <p className="mt-0.5 text-[13px] text-muted">{t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la {t.nextDay.first}</p>
+            <section className="mt-6 border-t border-line pt-6">
+              <h2 className="text-[13.5px] font-700 text-muted">{t.nextDay.label}</h2>
+              <p className="mt-1 text-[13px] text-muted">{t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la {t.nextDay.first}</p>
               <ul className="mt-3 space-y-1.5">{t.nextDay.pack.map((p) => <li key={p} className="flex items-center gap-2 text-sm"><Icons.bag size={15} className="shrink-0 text-muted" />{p}</li>)}</ul>
-            </motion.section>
+            </section>
           )}
           {t.announcements.length > 0 && (
-            <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-              <button onClick={() => onGoto('announcements')} className="mb-3 flex w-full items-center justify-between text-left"><h2 className="font-display text-lg font-700">Anunțuri</h2><Icons.chevR size={18} className="text-muted" /></button>
+            <section className="mt-6 border-t border-line pt-6">
+              <button onClick={() => onGoto('announcements')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Anunțuri</h2><Icons.chevR size={16} className="text-muted" /></button>
               <ul className="space-y-2">{t.announcements.map((a) => (
                 <li key={a.id} className="min-w-0">
                   <p className="flex items-center gap-1.5 text-sm font-700"><span className="min-w-0 truncate">{a.title}</span>{a.priority === 'urgent' && <span className="shrink-0 rounded-md bg-heat-heavy px-1.5 py-0.5 text-[11px] font-700 leading-none text-white">Urgent</span>}</p>
                   <p className="truncate text-[12.5px] text-muted">{a.author && `${a.author} · `}{announcementTarget(a)}</p>
                 </li>
               ))}</ul>
-            </motion.section>
+            </section>
           )}
           {t.newGrades.length > 0 && (
-            <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-              <button onClick={() => onGoto('marks')} className="mb-3 flex w-full items-center justify-between text-left"><h2 className="font-display text-lg font-700">Note noi</h2><Icons.chevR size={18} className="text-muted" /></button>
+            <section className="mt-6 border-t border-line pt-6">
+              <button onClick={() => onGoto('marks')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Note noi</h2><Icons.chevR size={16} className="text-muted" /></button>
               <ul className="space-y-1.5">{t.newGrades.map((g) => (
                 <li key={g.id} className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>
                   <span className="min-w-0 flex-1 truncate text-[13px]"><b className="font-700">{g.short}</b> · {fmtDate(g.d)}{g.note && ` · ${g.note}`}</span>
                 </li>
               ))}</ul>
-            </motion.section>
+            </section>
           )}
           {t.pack.length > 0 && (
-            <motion.section {...stagger(3)} className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-              <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-700"><Icons.bag size={18} className="text-brand" /> De pus în ghiozdan</h2>
-              <ul className="flex flex-wrap gap-2">{t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + i * 0.05 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}</ul>
-            </motion.section>
+            <section className="mt-6 border-t border-line pt-6">
+              <h2 className="mb-2.5 flex items-center gap-2 text-[13.5px] font-700 text-muted"><Icons.bag size={16} className="text-brand" /> De pus în ghiozdan</h2>
+              <ul className="flex flex-wrap gap-2">{t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 + i * 0.04 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}</ul>
+            </section>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
