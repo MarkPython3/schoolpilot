@@ -1315,12 +1315,15 @@ class Handler(BaseHTTPRequestHandler):
         if not target.startswith(PUBLIC) or not os.path.isfile(target):
             target = os.path.join(PUBLIC, "index.html")
         ctypes = {".html": "text/html; charset=utf-8", ".js": "text/javascript",
-                  ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json"}
+                  ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json",
+                  ".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".mp4": "video/mp4"}
         ext = os.path.splitext(target)[1]
         with open(target, "rb") as f:
             data = f.read()
         self.send_response(200)
         self.send_header("Content-Type", ctypes.get(ext, "application/octet-stream"))
+        if target.startswith(os.path.join(PUBLIC, "media") + os.sep):
+            self.send_header("Cache-Control", "public, max-age=86400")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

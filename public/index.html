@@ -154,6 +154,7 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const Mo = window.Motion || {};
 const motion = Mo.motion, AnimatePresence = Mo.AnimatePresence, MotionConfig = Mo.MotionConfig;
 const useReducedMotion = Mo.useReducedMotion || (() => false);
+const { useScroll, useTransform, useMotionValue, useMotionValueEvent } = Mo; // scroll-driven landing scenes
 const spring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 };        // default UI: near-critically damped, no distracting bounce
 const springBounce = { type: 'spring', stiffness: 420, damping: 26, mass: 0.9 };  // momentum interactions (flick / drag release): a little overshoot
 const SheetCtx = React.createContext(null);  // Sheet hands its onClose to the draggable Modal inside it (drag-to-dismiss)
@@ -2346,79 +2347,259 @@ function AbsencesPanel({ s, reload }) {
 /* =====================================================================
  *  LANDING  (shown before login; the hero holds the Higgsfield film slot)
  * ===================================================================== */
-function LandingPart({ title, body, flip, children }) {
+// A landing scene pinned while you scroll through it, like the hero film: progress p (0..1) drives
+// the visual in both directions. Reduced motion gets the finished state, unpinned.
+function ScrollScene({ title, body, flip, Visual }) {
   const reduce = useReducedMotion();
-  const text = reduce ? {} : { initial: { opacity: 0, y: 26 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: 0.35 }, transition: spring };
-  const vis = reduce ? {} : { initial: { opacity: 0, y: 28, scale: .97 }, whileInView: { opacity: 1, y: 0, scale: 1 }, viewport: { once: true, amount: 0.3 }, transition: { delay: 0.08, ...spring } };
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
+  const still = useMotionValue(1);
+  const p = reduce ? still : scrollYProgress;
+  const inner = (
+    <div className="mx-auto grid w-full max-w-5xl items-center gap-7 px-6 lg:grid-cols-2 lg:gap-16">
+      <div className={cx('min-w-0', flip && 'lg:order-2')}>
+        <h2 className="font-display text-[28px] font-700 leading-[1.08] sm:text-[40px]">{title}</h2>
+        <p className="mt-3 max-w-md text-[15.5px] leading-relaxed text-muted sm:mt-4 sm:text-[16.5px]">{body}</p>
+      </div>
+      <div className={cx('min-w-0', flip && 'lg:order-1')}><Visual p={p} /></div>
+    </div>
+  );
+  if (reduce) return <section ref={ref} className="py-20 sm:py-24">{inner}</section>;
   return (
-    <section className="mx-auto grid max-w-5xl items-center gap-10 px-6 py-20 sm:py-24 lg:grid-cols-2 lg:gap-16">
-      <motion.div {...text} className={cx('min-w-0', flip && 'lg:order-2')}>
-        <h2 className="font-display text-[30px] font-700 leading-[1.08] sm:text-[40px]">{title}</h2>
-        <p className="mt-4 max-w-md text-[16.5px] leading-relaxed text-muted">{body}</p>
+    <section ref={ref} className="relative" style={{ height: '220vh' }}>
+      <div className="graph-paper sticky top-0 flex h-[100svh] items-center overflow-hidden pt-14">{inner}</div>
+    </section>
+  );
+}
+// how many of `edges` the progress has passed (re-renders only when that count changes)
+function useStep(p, edges) {
+  const count = (v) => edges.filter((e) => v >= e).length;
+  const [n, setN] = useState(() => count(p.get()));
+  useMotionValueEvent(p, 'change', (v) => { const k = count(v); setN((o) => (o === k ? o : k)); });
+  return n;
+}
+const sceneCard = 'rounded-xl2 border border-line bg-white p-5 shadow-card';
+const pop = { initial: { scale: 0.4, opacity: 0 }, animate: { scale: 1, opacity: 1 }, exit: { scale: 0.4, opacity: 0 }, transition: springBounce };
+
+// 1 · Orar: the day ribbon grows, lessons slide in, "acum" settles on the current lesson
+const ORAR = [['08:00', 'Matematică', 'Sala 12', 'var(--p-thu)'], ['09:00', 'Fizică', 'Lab F', 'var(--p-mon)'], ['10:00', 'Limba română', 'Sala 8', 'var(--p-wed)'], ['11:00', 'Engleză', 'Sala 5', 'var(--p-tue)']];
+const ROW = 52;
+function RibbonBar({ p, i }) {
+  const s = useTransform(p, [0.04 + i * 0.045, 0.16 + i * 0.045], [0, 1]);
+  return <motion.div className="h-2 flex-1 rounded-full" style={{ background: `var(--p-${['mon', 'tue', 'wed', 'thu', 'fri', 'sat'][i]})`, scaleX: s, transformOrigin: 'left' }} />;
+}
+function OrarRow({ p, i, row: [tm, s, r, h] }) {
+  const a = 0.28 + i * 0.09, opacity = useTransform(p, [a, a + 0.08], [0, 1]), x = useTransform(p, [a, a + 0.08], [-18, 0]);
+  return (
+    <motion.div style={{ opacity, x, height: ROW }} className={cx('relative z-10 flex items-center gap-3 px-2', i > 0 && 'border-t border-line')}>
+      <span className="w-12 font-mono text-[13px] text-ink">{tm}</span><Dot hue={h} /><span className="flex-1 truncate font-700">{s}</span><span className="text-[12.5px] text-muted">{r}</span>
+    </motion.div>
+  );
+}
+function OrarScene({ p }) {
+  const nowO = useTransform(p, [0.7, 0.76], [0, 1]), nowY = useTransform(p, [0.76, 0.9], [0, ROW]);
+  const now = useStep(p, [0.9]);
+  return (
+    <div className={sceneCard}>
+      <div className="mb-4 flex gap-1">{[0, 1, 2, 3, 4, 5].map((i) => <RibbonBar key={i} p={p} i={i} />)}</div>
+      <div className="relative">
+        <motion.div aria-hidden="true" className="absolute inset-x-0 top-0 rounded-lg bg-brand-50" style={{ height: ROW, opacity: nowO, y: nowY, boxShadow: 'inset 3px 0 0 var(--color-accent)' }} />
+        {ORAR.map((row, i) => <OrarRow key={i} p={p} i={i} row={row} />)}
+      </div>
+      <p className="mt-3 h-5 text-[13px] font-600 text-brand-700">
+        <AnimatePresence>{now > 0 && <motion.span {...pop} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" />Acum: Fizică, în Lab F</motion.span>}</AnimatePresence>
+      </p>
+    </div>
+  );
+}
+
+// 2 · Note: grades land one by one, the average follows, then the calculator answers
+const NOTE = [9, 7, 8, 7, 9]; // media 8,00 → 2 note de 10 duc la 8,57, adică media 9
+const NOTE_AT = [0.12, 0.24, 0.36, 0.48, 0.6];
+function GradeChip({ p, i, v }) {
+  const a = NOTE_AT[i], opacity = useTransform(p, [a - 0.05, a], [0, 1]), scale = useTransform(p, [a - 0.05, a, a + 0.03], [0.5, 1.12, 1]);
+  return <motion.span style={{ opacity, scale, ...gradeStyle(v) }} className="grid h-10 w-10 place-items-center rounded-lg font-700 tnum">{v}</motion.span>;
+}
+function NoteScene({ p }) {
+  const k = useStep(p, NOTE_AT);
+  const avg = k ? (NOTE.slice(0, k).reduce((s, v) => s + v, 0) / k).toFixed(2).replace('.', ',') : '–';
+  const msgO = useTransform(p, [0.74, 0.84], [0, 1]), msgY = useTransform(p, [0.74, 0.84], [12, 0]);
+  return (
+    <div className={sceneCard}>
+      <div className="flex h-10 items-center gap-2.5">{NOTE.map((v, i) => <GradeChip key={i} p={p} i={i} v={v} />)}</div>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-line pt-4">
+        <div>
+          <p className="text-[12.5px] text-muted">Media</p>
+          <div className="relative h-[30px] min-w-[5.5rem] overflow-hidden">
+            <AnimatePresence initial={false}>
+              <motion.p key={avg} initial={{ y: 22, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -22, opacity: 0 }} transition={spring}
+                className="absolute inset-x-0 font-display text-3xl font-700 tnum leading-none">{avg}</motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+        <motion.p style={{ opacity: msgO, y: msgY }} className="rounded-xl bg-brand-50 px-3 py-2 text-[13px] font-600 text-brand-700">Îți mai trebuie <b>2 note de 10</b> pentru media 9.</motion.p>
+      </div>
+    </div>
+  );
+}
+
+// 3 · Furtuna: three tests drop on Thursday, the day heats up, the warning arrives
+const STORM_DAYS = [['Lun', HEAT.calm, ['Rom']], ['Mar', HEAT.light, ['Eng', 'Bio']], ['Mie', HEAT.calm, ['Ist']], ['Joi', null, []], ['Vin', HEAT.none, []]];
+function StormChip({ p, i, label }) {
+  const a = 0.12 + i * 0.16, y = useTransform(p, [a, a + 0.1], [-46, 0]), opacity = useTransform(p, [a, a + 0.05], [0, 1]);
+  return <motion.span style={{ y, opacity }} className="block truncate rounded-md bg-white/85 px-1.5 py-1 text-[11px] font-700 shadow-sm" >{label}</motion.span>;
+}
+function StormScene({ p }) {
+  const bg = useTransform(p, [0.1, 0.32, 0.56], [HEAT.calm.bg, HEAT.light.bg, HEAT.busy.bg]);
+  const ring = useTransform(p, [0.1, 0.32, 0.56], [HEAT.calm.ring, HEAT.light.ring, HEAT.busy.ring]);
+  const fg = useTransform(p, [0.1, 0.32, 0.56], [HEAT.calm.fg, HEAT.light.fg, HEAT.busy.fg]);
+  const shadow = useTransform(ring, (r) => `inset 0 0 0 1.5px ${r}`);
+  const alertO = useTransform(p, [0.68, 0.8], [0, 1]), alertY = useTransform(p, [0.68, 0.8], [18, 0]);
+  return (
+    <div>
+      <div className={cx(sceneCard, 'grid grid-cols-5 gap-2')}>
+        {STORM_DAYS.map(([d, heat, chips]) => {
+          const joi = !heat;
+          return (
+            <div key={d} className="min-w-0">
+              <motion.p className="mb-1.5 text-center font-mono text-[11.5px] font-500" style={{ color: joi ? fg : heat.fg }}>{d}</motion.p>
+              <motion.div className="flex h-[132px] flex-col gap-1 rounded-lg p-1.5" style={joi ? { background: bg, boxShadow: shadow } :{ background: heat.bg, boxShadow: `inset 0 0 0 1.5px ${heat.ring}` }}>
+                {joi ? ['Mate', 'Fiz', 'Chim'].map((c, i) => <StormChip key={c} p={p} i={i} label={c} />)
+                     : chips.map((c) => <span key={c} className="block truncate rounded-md bg-white/85 px-1.5 py-1 text-[11px] font-700 shadow-sm">{c}</span>)}
+              </motion.div>
+            </div>
+          );
+        })}
+      </div>
+      <motion.div style={{ opacity: alertO, y: alertY }} className="mt-3 flex items-start gap-3 rounded-xl2 border border-heat-busy/30 bg-heat-busybg p-4 shadow-card">
+        <Icons.alert size={22} className="mt-0.5 shrink-0 text-heat-busy" />
+        <div><p className="font-700">Joi: 3 evaluări (Mate, Fiz, Chim).</p><p className="mt-1 text-[14px] text-muted">E cea mai încărcată zi a săptămânii. Începe recapitularea cu Chimie azi.</p></div>
       </motion.div>
-      <motion.div {...vis} className={cx('min-w-0', flip && 'lg:order-1')}>{children}</motion.div>
+    </div>
+  );
+}
+
+// 4 · Brief: the morning list ticks itself off, then the day is ready
+const BRIEF = [[<Dot hue="var(--p-thu)" />, 'Test la Fizică — optică'], [<Icons.bag size={16} className="shrink-0 text-brand" />, 'Halat de laborator, laptop'], [<span className="h-4 w-4 shrink-0 rounded border-2 border-line" />, 'De predat: eseu la engleză']];
+function BriefScene({ p }) {
+  const k = useStep(p, [0.22, 0.42, 0.62, 0.8]);
+  return (
+    <div className={sceneCard}>
+      <p className="font-display text-xl font-700">Azi · <span className="text-muted">6 ore</span></p>
+      <ul className="mt-3 text-[14px]">
+        {BRIEF.map(([icon, text], i) => (
+          <li key={i} className={cx('flex items-center gap-2.5 py-2.5', i > 0 && 'border-t border-line')}>
+            <span className="grid w-4 shrink-0 place-items-center">{icon}</span>
+            <span className={cx('flex-1 transition-colors duration-300', i < k ? 'text-muted' : 'text-ink')}>{text}</span>
+            <span className="relative h-6 w-6 shrink-0 rounded-full border-2 border-line">
+              <AnimatePresence>{i < k && <motion.span {...pop} className="absolute -inset-0.5 grid place-items-center rounded-full bg-brand text-white"><Icons.check size={14} /></motion.span>}</AnimatePresence>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 h-9 border-t border-line pt-3">
+        <AnimatePresence>{k > 3 && <motion.p {...pop} className="font-display text-[17px] font-700 text-brand-700">Gata de școală.</motion.p>}</AnimatePresence>
+      </div>
+    </div>
+  );
+}
+// Hero film: a Higgsfield clip (week organiser filling up), extracted to a WebP sequence so
+// scrolling scrubs it frame-exact on a canvas (Apple's product-page technique; a seeking <video> stutters).
+const FILM = { n: 72, w: 1280, h: 721, src: (i) => `/media/hero/f${String(i).padStart(3, '0')}.webp` };
+const FILM_BEATS = [
+  'Orarul tău se așază singur, zi cu zi.',
+  'Joi se strâng trei teste? Afli din timp.',
+  'Azi e pus în ordine. Tu doar îl deschizi.',
+];
+function ScrollFilm() {
+  const reduce = useReducedMotion();
+  const wrap = useRef(null), canvas = useRef(null), imgs = useRef([]), shown = useRef(-1), want = useRef(0);
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    if (reduce) return;
+    const cv = canvas.current, ctx = cv.getContext('2d');
+    const size = () => { const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); shown.current = -1; draw(); };
+    const draw = () => {
+      // nearest loaded frame at or before the target, so a slow network still shows motion
+      let i = want.current; while (i > 0 && !imgs.current[i]?.ok) i--;
+      const im = imgs.current[i]; if (!im?.ok || i === shown.current) return;
+      // cover-crop: on narrow screens the canvas is 3:2, so trim the film's empty sides, not the tray
+      const s = Math.max(cv.width / im.naturalWidth, cv.height / im.naturalHeight), sw = cv.width / s, sh = cv.height / s;
+      shown.current = i; ctx.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+    };
+    imgs.current = Array.from({ length: FILM.n }, (_, i) => {
+      const im = new Image(); im.decoding = 'async';
+      im.onload = () => { im.ok = true; if (i <= want.current) draw(); };
+      im.src = FILM.src(i); return im;
+    });
+    let raf = 0;
+    const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => {
+      const r = wrap.current.getBoundingClientRect(), span = r.height - window.innerHeight;
+      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, span)));
+      const f = Math.min(1, p / 0.66); // the film ends at 66% of the scroll; the rest holds the finished week
+      want.current = Math.round(f * (FILM.n - 1)); draw();
+      // cards land, Thursday glows; then a pause on the full week before the last line arrives
+      setBeat(f < 0.5 ? 0 : p < 0.8 ? 1 : 2);
+    }); };
+    size(); onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', size);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', size); };
+  }, [reduce]);
+  const head = (
+    <>
+      <h1 className="font-display font-700 leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(2.3rem, 5.4vw, 4.4rem)' }}>Săptămâna ta,<br />pusă în ordine dinainte.</h1>
+      <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-muted" style={{ textWrap: 'balance' }}>Orar, note, teme și evaluări — într-un singur loc. Pentru elevi, profesori și administratori.</p>
+    </>
+  );
+  // fade the film's own paper into the page on all four edges (two linear masks, intersected)
+  const fade = 'linear-gradient(to right, transparent, #000 11%, #000 89%, transparent), linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent)';
+  const mask = { WebkitMaskImage: fade, maskImage: fade, WebkitMaskComposite: 'source-in', maskComposite: 'intersect' };
+  if (reduce) return ( // no scrubbing: the finished week, still
+    <section className="mx-auto flex max-w-6xl flex-col items-center px-6 pb-10 pt-28 text-center">
+      {head}
+      <img src={FILM.src(FILM.n - 1)} alt="" className="mt-8 w-full max-w-5xl" style={{ aspectRatio: `${FILM.w}/${FILM.h}`, ...mask }} />
+    </section>
+  );
+  return (
+    <section ref={wrap} className="relative" style={{ height: '480vh' }}>
+      {/* the stage carries its own opaque grid paper: while pinned, nothing behind the film moves */}
+      <div className="graph-paper sticky top-0 flex h-[100svh] flex-col items-center overflow-hidden px-6 pb-6 pt-20 text-center sm:pt-24">
+        {head}
+        <div className="relative mt-2 flex min-h-0 w-full flex-1 items-center justify-center">
+          {/* width from whichever binds first: the column, 64rem, or the height left under the headline */}
+          <canvas ref={canvas} aria-hidden="true" className="block h-auto [--ar:1.5] sm:[--ar:1.7778]"
+            style={{ aspectRatio: 'var(--ar)', width: 'min(100%, 64rem, calc((100svh - 400px) * var(--ar)))', ...mask }} />
+        </div>
+        <div className="relative h-[4.6rem] w-full sm:h-14" aria-live="polite">
+          <AnimatePresence initial={false}>
+            <motion.p key={beat} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute inset-x-0 mx-auto max-w-3xl font-display font-700 leading-[1.12]" style={{ fontSize: 'clamp(1.5rem, 3.2vw, 2.4rem)', textWrap: 'balance' }}>{FILM_BEATS[beat]}</motion.p>
+          </AnimatePresence>
+        </div>
+        <p className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-600 text-muted">Derulează ca să vezi cum funcționează <Icons.chevD size={15} /></p>
+      </div>
     </section>
   );
 }
 function Landing({ onLogin }) {
   const reduce = useReducedMotion();
   const rise = (d = 0) => reduce ? {} : { initial: { opacity: 0, y: 26 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: 0.4 }, transition: { delay: d, ...spring } };
-  const hues = ['var(--p-mon)', 'var(--p-tue)', 'var(--p-wed)', 'var(--p-thu)', 'var(--p-fri)', 'var(--p-sat)'];
-  const lessons = [['08:00', 'Matematică', 'Sala 12', 'var(--p-thu)'], ['09:00', 'Fizică', 'Lab F', 'var(--p-mon)'], ['10:00', 'Limba română', 'Sala 8', 'var(--p-wed)']];
   return (
     <div className="graph-paper min-h-screen">
-      <header className="edge-b sticky top-0 z-30 backdrop-blur" style={{ background: 'color-mix(in oklab, var(--color-paper) 82%, transparent)' }}>
+      <header className="edge-b fixed inset-x-0 top-0 z-30 backdrop-blur" style={{ background: 'color-mix(in oklab, var(--color-paper) 82%, transparent)' }}>
         <div className="mx-auto flex max-w-6xl items-center px-6 py-3.5">
           <div className="flex items-center gap-2.5"><Logo size={32} /><span className="font-display text-lg font-800 tracking-tight">SchoolPilot</span></div>
         </div>
       </header>
 
-      {/* HERO — HIGGSFIELD FILM SLOT: drop a scroll-scrubbed <video> here later; placeholder below. */}
-      <section className="relative mx-auto flex min-h-[84vh] max-w-6xl flex-col items-center justify-center px-6 py-16 text-center">
-        <motion.h1 {...rise()} className="font-display font-700 leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(2.5rem, 6vw, 4.8rem)' }}>Săptămâna ta,<br />pusă în ordine dinainte.</motion.h1>
-        <motion.p {...rise(0.08)} className="mt-6 max-w-xl text-[17px] leading-relaxed text-muted">Orar, note, teme și evaluări — într-un singur loc. Pentru elevi, profesori și administratori.</motion.p>
-        <motion.div {...rise(0.22)} className="mt-12 w-full max-w-3xl"><OrganiserPreview /></motion.div>
-        <motion.p {...rise(0.42)} className="mt-10 inline-flex items-center gap-1.5 text-[13px] font-600 text-muted">Derulează ca să vezi cum funcționează <Icons.chevD size={15} /></motion.p>
-      </section>
+      {/* HERO — Higgsfield film, scrubbed by scroll (see ScrollFilm) */}
+      <ScrollFilm />
 
-      <LandingPart title="Tot orarul, într-o privire." body="Zilele tale, colorate pe materii. Vezi dintr-o privire ce urmează, la ce oră și în ce sală.">
-        <div className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-          <div className="mb-4 flex gap-1">{hues.map((h, i) => <div key={i} className="h-2 flex-1 rounded-full" style={{ background: h }} />)}</div>
-          {lessons.map(([tm, s, r, h], i) => (
-            <div key={i} className={cx('flex items-center gap-3 py-2.5', i > 0 && 'border-t border-line')}>
-              <span className="w-12 font-mono text-[13px] text-ink">{tm}</span><Dot hue={h} /><span className="flex-1 truncate font-700">{s}</span><span className="text-[12.5px] text-muted">{r}</span>
-            </div>
-          ))}
-        </div>
-      </LandingPart>
-
-      <LandingPart flip title="Notele și media, mereu la zi." body="Catalogul tău, clar. Plus calculatorul: îți spune de câte note ai nevoie ca să ajungi la media dorită.">
-        <div className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-          <div className="flex items-center gap-2.5">{[9, 7, 10, 8, 10].map((v, i) => <span key={i} className="grid h-10 w-10 place-items-center rounded-lg font-700 tnum" style={gradeStyle(v)}>{v}</span>)}</div>
-          <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-line pt-4">
-            <div><p className="text-[12.5px] text-muted">Media</p><p className="font-display text-3xl font-700 tnum leading-none">8,80</p></div>
-            <p className="rounded-xl bg-brand-50 px-3 py-2 text-[13px] font-600 text-brand-700">Îți mai trebuie <b>2 note de 10</b> pentru media 9.</p>
-          </div>
-        </div>
-      </LandingPart>
-
-      <LandingPart title="Vezi furtuna înainte să lovească." body="Trei teste în aceeași zi? Primești avertismentul din timp — și de unde să începi recapitularea.">
-        <div className="flex items-start gap-3 rounded-xl2 border border-heat-busy/30 bg-heat-busybg p-5 shadow-card">
-          <Icons.alert size={22} className="mt-0.5 shrink-0 text-heat-busy" />
-          <div><p className="font-700">Joi: 3 evaluări (Mate, Fiz, Chim).</p><p className="mt-1 text-[14px] text-muted">E cea mai încărcată zi a săptămânii. Începe recapitularea cu Chimie azi.</p></div>
-        </div>
-      </LandingPart>
-
-      <LandingPart flip title="Dimineața, ziua pusă în ordine." body="În fiecare dimineață: orele de azi, ce ai de predat și ce să pui în ghiozdan. Fără surprize.">
-        <div className="rounded-xl2 border border-line bg-white p-5 shadow-card">
-          <p className="font-display text-xl font-700">Azi · <span className="text-muted">6 ore</span></p>
-          <ul className="mt-3 space-y-2.5 text-[14px]">
-            <li className="flex items-center gap-2.5"><Dot hue="var(--p-thu)" /> Test la Fizică — optică</li>
-            <li className="flex items-center gap-2.5"><Icons.bag size={16} className="shrink-0 text-brand" /> Halat de laborator, laptop</li>
-            <li className="flex items-center gap-2.5"><span className="h-5 w-5 shrink-0 rounded-md border-2 border-line" /> De predat: eseu la engleză</li>
-          </ul>
-        </div>
-      </LandingPart>
+      <ScrollScene Visual={OrarScene} title="Tot orarul, într-o privire." body="Zilele tale, colorate pe materii. Vezi dintr-o privire ce urmează, la ce oră și în ce sală." />
+      <ScrollScene Visual={NoteScene} flip title="Notele și media, mereu la zi." body="Catalogul tău, clar. Plus calculatorul: îți spune de câte note ai nevoie ca să ajungi la media dorită." />
+      <ScrollScene Visual={StormScene} title="Vezi furtuna înainte să lovească." body="Trei teste în aceeași zi? Primești avertismentul din timp — și de unde să începi recapitularea." />
+      <ScrollScene Visual={BriefScene} flip title="Dimineața, ziua pusă în ordine." body="În fiecare dimineață: orele de azi, ce ai de predat și ce să pui în ghiozdan. Fără surprize." />
 
       <section className="mx-auto max-w-3xl px-6 py-24 text-center sm:py-28">
         <motion.h2 {...rise()} className="font-display text-[32px] font-700 leading-tight sm:text-[46px]">Gata să-ți pui săptămâna în ordine?</motion.h2>
