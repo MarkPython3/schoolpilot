@@ -2,119 +2,58 @@
 
 **The app that stops your school week from ambushing you.**
 
-A school companion app with three kinds of account — **admin**, **teacher**, and
-**student** — each with its own UI. The admin builds everything (schools, classes,
-teachers, students, timetable) from an empty database; teachers see only their own
-classes and the workload heatmap; students get the morning brief, timetable and
-catalog.
+SchoolPilot keeps a school's timetable, grades, absences, tests and messages in one place, with a separate view for administrators, teachers and students. The interface is in Romanian.
 
-Full-stack, zero dependencies: a Python backend (SQLite + REST API) and a React SPA.
+## Welcome page
 
-## Run it
+- A short scrolling film shows a school week falling into place: lessons settle into each day, a crowded Thursday raises a warning, and today is marked as ready.
+- Four scenes then build up as you scroll, one each for the timetable, grades, the workload warning and the morning summary.
+- "Intră în cont" at the end leads to the login page.
 
-**Requirements:** Python 3.8+ and a Supabase project (for login). No `pip install`, no Node, no build step.
+## Accounts
 
-Copy `.env.example` to `.env` and fill in `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
-`SUPABASE_SECRET_KEY` (server-only, never commit it) and `ADMIN_EMAIL`. Create the admin
-user in Supabase Auth with that email and **disable public sign-ups** — the admin creates
-every other account from the app.
+- Only the school administrator creates accounts; nobody can sign up alone.
+- Every new account gets a one-time password and must choose its own at first login.
+- Everyone sees only what concerns them: teachers see the classes they teach, students see their own data.
 
-```bash
-python3 server.py            # → http://localhost:8000
-PORT=5000 python3 server.py  # custom port
-python3 seed.py              # demo data: wipes the DB, then adds class 10B (see below)
-```
+## Administrators
 
-`seed.py` builds a demo school: class **10B** with 25 students, 8 teachers, a full
-timetable, an upcoming **Thursday with three tests**, and a student
-(**Matei Constantin**) whose physics average is close to failing. Dates are
-relative to today, so re-run it before a demo.
+- See an overview of each school: the overall average, how many averages are below 6, unexcused absences, tests scheduled too close together and the busiest day.
+- Create schools, and inside each school: classes, teachers (with the subjects they teach) and students.
+- Name each class's form teacher (diriginte).
+- Reset a teacher's or student's password, or remove an account.
+- Build each class's timetable: subject, teacher, room and lesson times.
+- Set the five modules of the school year.
+- Post announcements to the whole school or to one class, and add school events.
 
-Open **http://localhost:8000**. The database starts with a **single admin account**
-and nothing else — you build the rest.
+## Teachers
 
-## First run (how to test everything)
+- **My schedule**: the week's lessons they teach, with today highlighted.
+- **Lesson changes**: cancel a lesson, move it to another room or name a substitute for a given day. The class is told automatically.
+- **Gradebook**: for each class and subject they teach, every student's grades, average and absences, with students at risk of failing flagged.
+- **Today's attendance**: take the roll for the current lesson in one go.
+- **Excusing absences**: absences can be excused by the teacher who recorded them or by the form teacher.
+- **Scheduling tests and homework**: the app suggests the class's three calmest days. The title can be dictated by voice.
+- **Class workload**: a week-by-week view of each class's tests, with a warning when too many land on the same day.
+- **Announcements** to their classes, showing how many students have read each one.
+- **Messages** with the students of their classes.
 
-1. **Log in with the admin email and password** (the only account at first).
-2. **Add a school** → open it.
-3. **Clase** → add a class (e.g. `10B`).
-4. **Profesori** → add a teacher with their email, tick the subjects they teach. The app
-   shows a **temporary password once** — pass it on; they must set their own at first login.
-5. **Elevi** → add a student (with email), assign them to the class. **Resetează parola**
-   issues a new temporary password.
-6. **Orar** → pick the class, tap cells to place subject + teacher + room.
-7. **Log out → log in as the teacher**: see only your own lessons, open **Încărcare**,
-   and **schedule a test** — the app suggests the class's calmest days; two graded
-   assessments on one day raise a **collision** warning.
-8. **Log out → log in as the student**: the **morning brief** shows today's lessons,
-   what to pack, and what's due; add grades to try the **"what do I need?"** calculator.
+## Students
 
-> `POST /api/reset` wipes everything back to just the admin account.
-
-## Roles & capabilities
-
-### Admin
-- Add / delete **schools**.
-- Per school: add / delete **classes** (and set each class's **diriginte**), **teachers** (with subjects), **students** (assigned to a class).
-- Post **announcements** to the whole school or to one class.
-- Build the **timetable** per class (place/replace/remove any slot: subject, teacher, room, start and end time).
-- Starts empty — nothing is seeded except the admin account.
-
-### Teacher
-- **Orarul meu** — weekly schedule showing only the lessons they teach (class, subject, room, time; today highlighted).
-- **Catalog** — per class + subject they teach: student list with grades, average and absences; add/edit/delete their own grades and absences; **Prezența de azi** roll call for today's lesson; **Motivări** for the diriginte.
-- **Încărcare** — per-class workload heatmap + collision detector; schedule assessments with calmest-day suggestions.
-- **Schimbă** on a lesson — cancel it, move it or name a substitute for one date; the class is notified.
-- **Anunțuri** — post to a class they teach or are diriginte of, optionally for one subject, with a priority; see how many pupils have read it.
-
-### Student
-- **Azi** — morning brief: today's lessons, what to pack, what's due (tick tasks done), announcements, and new grades from the last 3 days. A warning appears when tests pile up, with where to start revising; from 15:00 it also shows the next school day and what to pack for it.
-- **Orar** — their class timetable with assessment markers, the class workload for two weeks and every upcoming test or assignment.
-- **Anunțuri** — feed for their class and school; recent ones also appear on Azi.
-- **Mesaje** — one-to-one with the teachers of their class, with templates and anonymous questions. Pupils can't message each other, and messages sent between 20:00 and 07:00 reach the teacher in the morning.
-- **Notificări** — new or changed grades, absences (and when they're excused), announced tests and assignments, plus a reminder when one is due today or tomorrow; a badge counts the unread ones.
-- **Catalog** — read-only grades (date, note and teacher on tap/hover, averages, "what do I need?" calculator) and absences.
-
-## Architecture
-
-```
-schoolpilot/
-├── server.py          # stdlib HTTP server + SQLite + REST API (zero deps)
-├── public/
-│   └── index.html     # React SPA (React + Tailwind + Framer Motion via CDN)
-└── schoolpilot.db     # created on first run, admin-only seed (git-ignored)
-```
-
-### API (selected)
-
-| Method | Path | Role |
-| --- | --- | --- |
-| GET | `/api/accounts` | login picker |
-| GET | `/api/admin` | admin snapshot (schools/classes/teachers/students) |
-| POST/DELETE | `/api/schools`, `/api/classes`, `/api/teachers`, `/api/students` | admin |
-| GET/POST/DELETE | `/api/timetable` | admin builds, everyone reads |
-| GET | `/api/teacher?userId=` · `/api/teacher/workload?classId=` | teacher |
-| POST/DELETE | `/api/assessments` | teacher |
-| GET | `/api/student?userId=` | student |
-| PATCH/DELETE | `/api/tasks/:id` | student |
-| GET | `/api/notifications` · POST `/api/notifications/read` | student |
-| GET · POST · DELETE `/:id` | `/api/announcements` (POST `/read`: student) | all read; teacher and admin post |
-| POST | `/api/grades/what-if` | student |
-| GET | `/api/teacher/catalog?classId=&subject=` · `/api/teacher/motivari` | teacher |
-| POST · PATCH/DELETE `/:id` | `/api/grades`, `/api/absences` | teacher (own entries; diriginte can excuse) |
-| PATCH | `/api/classes/:id` (diriginte) | admin |
-| POST | `/api/reset` | wipe to admin-only |
-
-## Design
-
-- **Teal** brand on a cool graph-paper canvas (the squared-notebook motif).
-- The **workload heat scale** (green → red) is the one functional colour system.
-- **Bricolage Grotesque** display + **Inter** (tabular figures) for data.
-- Motion animations (sliding-pill tabs, shimmer button), `prefers-reduced-motion`,
-  keyboard focus, mobile bottom-nav. UI follows the [Watermelon UI](https://ui.watermelon.sh) idiom.
-
-### Not in this build
-No self-service password reset by email (the admin resets passwords), and no
-messaging/announcements.
-
-> Working name / placeholder branding. UI is in Romanian for the target school context.
+- **Today**: the day's lessons with the current one highlighted, what to pack, what's due, recent grades and announcements. A warning appears when tests pile up, with a suggestion of where to start revising. From 15:00 it also shows the next school day and what to pack for it.
+- **Timetable**: the full week, colour-coded by subject, with upcoming tests marked and the class's workload for the next two weeks.
+- **Grades**:
+  - every grade with its date and teacher;
+  - averages per subject and overall, rounded the Romanian way;
+  - a chart of how each subject is going.
+- **Goals**: set a target average per subject and see how many more 10s it takes to reach it.
+- **"How many grades do I need?"**: pick a target average and the grade you expect, and the app says how many such grades it takes.
+- **Absences**: excused and unexcused. Recent unexcused absences are flagged on the Today page with a reminder to check the deadline with the form teacher.
+- **Tasks**: homework and assignments to tick off.
+- **Notifications**:
+  - new or changed grades and absences;
+  - newly announced tests;
+  - reminders the day before and the day of a deadline;
+  - a warning when an average drops into the risk zone.
+- **Announcements** from the class and the school.
+- **Messages** with the teachers of their class, with ready-made opening lines and the option to ask a question anonymously. Students can't message each other. Messages sent late in the evening reach the teacher at 7:00.
