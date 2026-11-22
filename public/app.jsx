@@ -7,7 +7,8 @@ const spring = { type: 'spring', stiffness: 380, damping: 32, mass: 0.8 };      
 const springBounce = { type: 'spring', stiffness: 420, damping: 26, mass: 0.9 };  // momentum interactions (flick / drag release): a little overshoot
 const SheetCtx = React.createContext(null);  // Sheet hands its onClose to the draggable Modal inside it (drag-to-dismiss)
 const cx = (...a) => a.filter(Boolean).join(' ');
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`; // Romanian singular/plural
+const de = (n) => (n % 100 >= 20 || (n > 0 && n % 100 === 0) ? 'de ' : ''); // 20 de elevi, 101 elevi, 120 de elevi
+const plural = (n, one, many) => `${n} ${n === 1 ? one : de(n) + many}`; // Romanian singular/plural
 const DAYS = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri'];
 const DAYS_SHORT = ['Lun', 'Mar', 'Mie', 'Joi', 'Vin'];
 
@@ -23,6 +24,7 @@ const HEAT = {
 // Supabase client (created at boot from /api/config) and what to do when the server says 401.
 let sb = null;
 let onUnauthorized = () => {};
+let onMustChangePassword = () => {}; // the admin reset this account's password mid-session
 const authHeader = async () => {
   if (!sb) return {};
   const { data } = await sb.auth.getSession();
@@ -33,6 +35,7 @@ const jfetch = async (url, opts = {}) => {
   const r = await fetch(url, { ...opts, headers }).catch(() => { throw new Error('Nu pot contacta serverul.'); });
   const d = await r.json().catch(() => ({}));
   if (r.status === 401) onUnauthorized();
+  if (r.status === 403 && d.mustChangePassword) onMustChangePassword();
   if (!r.ok) throw new Error(d.error || 'A apărut o eroare. Încearcă din nou.');
   return d;
 };
@@ -47,7 +50,20 @@ const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
 const MONTHS_RO = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const fmtDate = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(s || ''); return m ? `${Number(m[2])} ${MONTHS_RO[Number(m[1]) - 1]}` : (s || ''); };
 const gradeStyle = (v) => ({ background: v >= 9 ? '#DEF7E6' : v >= 7 ? '#E7FBF7' : v >= 5 ? '#FBF1CF' : '#FBDFDF', color: v >= 9 ? '#0F7C39' : v >= 7 ? '#0B7A72' : v >= 5 ? '#946500' : '#AE1919' });
-const absentaLabel = (n) => (n === 1 ? '1 absență' : `${n} absențe`);
+// [busy, once]: once(fn) ignores repeat calls (double click, Enter + click) while fn's promise is pending
+function useBusy() {
+  const [busy, setBusy] = useState(false);
+  const flight = useRef(false);
+  const once = (fn) => (...args) => {
+    if (flight.current) return;
+    const p = fn(...args);
+    if (!p || typeof p.finally !== 'function') return p;
+    flight.current = true; setBusy(true);
+    return p.finally(() => { flight.current = false; setBusy(false); });
+  };
+  return [busy, once];
+}
+const absentaLabel = (n) => (n === 1 ? '1 absență' : `${n} ${de(n)}absențe`);
 
 /* ---------------- Icons ---------------- */
 const Ic = ({ size = 20, fill = false, sw = 1.75, children, ...p }) => (
@@ -403,7 +419,7 @@ function SubjectChips({ subjects, selected, toggle }) {
 }
 
 /* ================= WORKLOAD heatmap (teacher) ================= */
-function Heatmap({ wl, typeLabel }) {
+function Heatmap({ wl, typeLabel, canDelete, onDelete }) {
   const reduce = useReducedMotion();
   return (
     <div className="space-y-4">
@@ -417,7 +433,11 @@ function Heatmap({ wl, typeLabel }) {
                 <div className="flex items-center justify-between"><span className="font-mono text-[12px] font-500" style={{ color: h.fg }}>{d.dateLabel}</span>{d.clash && <Icons.alert size={13} style={{ color: h.fg }} />}</div>
                 <div className="mt-2 flex-1 space-y-1">
                   {d.items.length === 0 && <span className="text-[11px]" style={{ color: h.fg, opacity: .6 }}>liber</span>}
-                  {d.items.map((t, j) => <div key={j} className="truncate rounded-md px-1 py-1 text-[10.5px] sm:px-1.5 font-600 leading-tight" style={{ color: h.fg, background: 'rgba(255,255,255,.55)' }} title={`${t.short} · ${typeLabel[t.type].toLowerCase()}`}>{t.short}<span className="hidden sm:inline"> · {typeLabel[t.type].toLowerCase()}</span></div>)}
+                  {d.items.map((t, j) => { const kind = (typeLabel[t.type] || 'evaluare').toLowerCase(); const mine = onDelete && canDelete && canDelete(t);
+                    const cls = 'block w-full truncate rounded-md px-1 py-1 text-left text-[10.5px] sm:px-1.5 font-600 leading-tight';
+                    return mine
+                      ? <button key={j} onClick={() => onDelete(t, d)} className={cx(cls, 'hover:ring-1 hover:ring-current')} style={{ color: h.fg, background: 'rgba(255,255,255,.55)' }} title={`${t.title} · atinge ca să o ștergi`}>{t.short}<span className="hidden sm:inline"> · {kind}</span></button>
+                      : <div key={j} className={cls} style={{ color: h.fg, background: 'rgba(255,255,255,.55)' }} title={`${t.short} · ${kind}`}>{t.short}<span className="hidden sm:inline"> · {kind}</span></div>; })}
                 </div>
                 <span className="mt-2 hidden text-[10.5px] font-600 sm:block" style={{ color: h.fg, opacity: .85 }}>{d.heat.label}</span>
               </motion.div>
@@ -707,7 +727,8 @@ function AdminApp({ account, onLogout }) {
 function AdminSchools({ a, reload, onOpen }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const add = () => { if (!name.trim()) return; API.post('/api/schools', { name }).then(() => { setName(''); setAdding(false); toast.success('Școala a fost adăugată.'); return reload(); }).catch(toastError); };
+  const [busy, once] = useBusy();
+  const add = once(() => { if (!name.trim()) return; return API.post('/api/schools', { name }).then(() => { setName(''); setAdding(false); toast.success('Școala a fost adăugată.'); return reload(); }).catch(toastError); });
   const del = async (s) => {
     if (!await askConfirm({ title: `Ștergi școala „${s.name}”?`, body: 'Clasele, orarul, profesorii și elevii ei vor fi șterși, împreună cu toate conturile.', action: 'Șterge școala' })) return;
     API.del(`/api/schools/${s.id}`).then(() => { toast.success('Școala a fost ștearsă.'); return reload(); }).catch(toastError);
@@ -735,7 +756,7 @@ function AdminSchools({ a, reload, onOpen }) {
         {adding && <Modal>
           <h3 id="sch-t" className="font-display text-xl font-700">Adaugă o școală</h3>
           <div className="mt-4"><Field label="Numele școlii"><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="ex. Colegiul Național Mihai Viteazul" /></Field></div>
-          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add}>Salvează</ShimmerButton><button onClick={() => setAdding(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+          <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={add} disabled={busy}>Salvează</ShimmerButton><button onClick={() => setAdding(false)} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
         </Modal>}
       </Sheet>
     </div>
@@ -808,7 +829,8 @@ function AdminModules({ school, reload }) {
 }
 function AdminClasses({ school, reload }) {
   const [name, setName] = useState('');
-  const add = () => { if (!name.trim()) return; API.post('/api/classes', { schoolId: school.id, name }).then(() => { setName(''); toast.success('Clasa a fost adăugată.'); return reload(); }).catch(toastError); };
+  const [busy, once] = useBusy();
+  const add = once(() => { if (!name.trim()) return; return API.post('/api/classes', { schoolId: school.id, name }).then(() => { setName(''); toast.success('Clasa a fost adăugată.'); return reload(); }).catch(toastError); });
   const del = async (c) => {
     if (!await askConfirm({ title: `Ștergi clasa ${c.name}?`, body: 'Orarul și evaluările clasei vor fi șterse. Elevii rămân în școală, fără clasă.', action: 'Șterge clasa' })) return;
     API.del(`/api/classes/${c.id}`).then(() => { toast.success('Clasa a fost ștearsă.'); return reload(); }).catch(toastError);
@@ -818,7 +840,7 @@ function AdminClasses({ school, reload }) {
     <div>
       <div className="mb-4 flex items-end gap-2">
         <div className="flex-1 sm:max-w-xs"><Field label="Nume clasă"><Input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="ex. 10B" /></Field></div>
-        <ShimmerButton icon={<Icons.plus size={18} />} onClick={add}>Adaugă</ShimmerButton>
+        <ShimmerButton icon={<Icons.plus size={18} />} onClick={add} disabled={busy}>Adaugă</ShimmerButton>
       </div>
       {school.classes.length === 0 ? <Empty icon={<Icons.users size={26} />} title="Nicio clasă" body="Adaugă o clasă (ex. 9A, 10B). Elevii și orarul se leagă de o clasă." />
         : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1096,7 +1118,7 @@ function LessonChangeForm({ lesson, colleagues, onClose, onSaved }) {
       <p className="text-sm text-muted">{lesson.subjectName} · {lesson.className} · {DAYS[lesson.day]}, {lesson.time}</p>
       <div className="mt-4 space-y-4">
         <PickChips label="Tip" options={[{ id: 'cancelled', label: 'Anulată' }, { id: 'room', label: 'Altă sală' }, { id: 'substitute', label: 'Suplinire' }]} value={kind} onChange={setKind} />
-        <Field label="Data"><Input type="date" value={date} min={todayISO()} step={7} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label="Data"><Input type="date" value={date} min={nextDateFor(lesson.day)} step={7} onChange={(e) => setDate(e.target.value)} /></Field>
         {kind === 'room' && <Field label="Sala nouă"><Input value={room} maxLength={40} onChange={(e) => setRoom(e.target.value)} placeholder="ex. A24" /></Field>}
         {kind === 'substitute' && <div><span className="mb-1 block text-[12px] font-700 text-muted">Suplinitor</span>
           <SearchSelect inline label="Suplinitor" value={teacherId} onChange={setTeacherId} placeholder="— alege profesor —" searchPlaceholder="Caută profesorul…" empty="Niciun profesor găsit." options={colleagues.map((c) => ({ value: String(c.id), label: c.name }))} /></div>}
@@ -1239,7 +1261,7 @@ function TeacherCatalog({ t }) {
     </div>
   );
 }
-const isAtRisk = (s) => s.avg !== null && s.avg < 6;
+const isAtRisk = (s) => s.avg !== null && s.avg < 5.5; // rounds below 6 (x.50 rounds up)
 function SortHeader({ label, dir, onClick, right }) {
   return (
     <button type="button" onClick={onClick} className={cx('inline-flex items-center gap-1 text-[12px] font-700 hover:text-ink', dir ? 'text-ink' : 'text-muted', right && 'flex-row-reverse')}>
@@ -1454,8 +1476,13 @@ function TeacherWorkload({ t }) {
   const [wl, setWl] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [err, setErr] = useState(null);
-  const load = useCallback(() => { if (classId) API.get(`/api/teacher/workload?classId=${classId}`).then((d) => { setErr(null); setWl(d); }).catch((e) => setErr(errText(e))); }, [classId]);
-  useEffect(() => { load(); }, [load]);
+  const current = useRef(classId); current.current = classId;
+  const load = useCallback(() => { if (classId) return API.get(`/api/teacher/workload?classId=${classId}`).then((d) => { if (current.current === classId) { setErr(null); setWl(d); } }).catch((e) => { if (current.current === classId) setErr(errText(e)); }); }, [classId]);
+  useEffect(() => { setWl(null); setErr(null); load(); }, [load]); // never show the previous class's map under the new name
+  const removeTest = async (it, day) => {
+    if (!await askConfirm({ title: `Ștergi „${it.title}”?`, body: `${it.short}, ${day.dateLabel}. Elevii nu o vor mai vedea, iar notificarea ei dispare.`, action: 'Șterge evaluarea' })) return;
+    API.del(`/api/assessments/${it.id}`).then(() => { toast.success('Evaluarea a fost ștearsă.'); return load(); }).catch(toastError);
+  };
   if (t.classes.length === 0) return <div><ViewHead title="Încărcare" sub="Harta evaluărilor pe clasă" icon={<Icons.pulse />} /><Empty icon={<Icons.pulse size={26} />} title="Nicio clasă" body="Vei vedea harta de încărcare după ce ai ore în orar." /></div>;
   const myClass = t.classes.find((c) => c.id === classId);
   return (
@@ -1467,17 +1494,18 @@ function TeacherWorkload({ t }) {
           {t.classes.map((c) => <button key={c.id} onClick={() => setClassId(c.id)} className={cx('rounded-lg px-3 py-1.5 text-[13px] font-700 ring-1', classId === c.id ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{c.name}</button>)}
         </div>
       )}
-      {wl && wl.collisions.length > 0 && (
+      {!err && wl && wl.collisions.length > 0 && (
         <div className="mb-4 flex items-start gap-3 rounded-xl2 border border-heat-heavy/25 bg-heat-heavybg/60 p-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-heat-heavy shadow-sm"><Icons.alert size={18} /></span>
           <div className="text-sm"><p className="font-700 text-heat-heavy">Coliziune de evaluări în {myClass.name}</p>
             {wl.collisions.map((c, i) => c.kind === 'window'
-              ? <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.length} evaluări în 48 de ore — {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()}, ${x.dateLabel})`).join(' + ')}. Ia în calcul o altă zi.</p>
-              : <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((x) => `${x.short} (${TYPE_LABEL[x.type].toLowerCase()})`).join(' + ')}. Ia în calcul o altă zi.</p>)}
+              ? <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.length} evaluări în 48 de ore — {c.items.map((x) => `${x.short} (${(TYPE_LABEL[x.type] || 'evaluare').toLowerCase()}, ${x.dateLabel})`).join(' + ')}. Ia în calcul o altă zi.</p>
+              : <p key={i} className="mt-0.5 text-ink/75"><b>{c.dateLabel}</b>: {c.items.map((x) => `${x.short} (${(TYPE_LABEL[x.type] || 'evaluare').toLowerCase()})`).join(' + ')}. Ia în calcul o altă zi.</p>)}
           </div>
         </div>
       )}
-      {wl ? <Heatmap wl={wl} typeLabel={TYPE_LABEL} /> : err ? <LoadFailed err={err} retry={load} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      {err ? <LoadFailed err={err} retry={load} /> : wl ? <Heatmap wl={wl} typeLabel={TYPE_LABEL} canDelete={(it) => it.teacherId === t.teacher.id} onDelete={removeTest} /> : <div className="p-6 text-muted"><Spinner size={16} /> …</div>}
+      {wl && <p className="mt-2 text-[12px] text-muted">Atinge o evaluare pusă de tine ca să o ștergi.</p>}
       <ShimmerButton icon={<Icons.plus size={18} />} onClick={() => setAddOpen(true)} className="mt-4 w-full sm:hidden">Programează o lucrare</ShimmerButton>
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} labelledBy="a-t">
         {addOpen && <ScheduleTest t={t} classId={classId} className={myClass.name} suggestions={wl ? wl.suggestions : []} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); load(); }} />}
@@ -1519,20 +1547,28 @@ function DictateButton({ onText, onError }) {
   );
 }
 function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) {
-  const mySubs = t.subjectCatalog.filter((s) => t.teacher.subjects.includes(s.code));
+  const taught = (t.classes.find((c) => c.id === classId) || {}).subjects || []; // what they teach in THIS class, per the timetable
+  const mySubs = t.subjectCatalog.filter((s) => taught.includes(s.code));
+  const [busy, setBusy] = useState(false);
   const [subject, setSubject] = useState(mySubs[0] ? mySubs[0].code : '');
   const [type, setType] = useState('test');
   const [dateISO, setDateISO] = useState('');
   const [title, setTitle] = useState('');
   const [dictateErr, setDictateErr] = useState(null);
   const addDictated = (text) => setTitle((v) => (v.trim() ? `${v.trim()} ${text}` : text.charAt(0).toUpperCase() + text.slice(1)));
-  const save = () => { if (!subject || !dateISO) return; API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type] }).then(() => { toast.success(`${TYPE_LABEL[type]} programată.`); onSaved(); }).catch(toastError); };
+  const save = () => {
+    if (!subject) return toast.error('Alege materia.');
+    if (!dateISO) return toast.error('Alege data.');
+    setBusy(true);
+    API.post('/api/assessments', { classId, subject, type, date: dateISO, title: title || TYPE_LABEL[type] })
+      .then(() => { toast.success(`${TYPE_LABEL[type]} programată.`); onSaved(); }).catch(toastError).finally(() => setBusy(false));
+  };
   return (
     <Modal>
       <h3 id="a-t" className="font-display text-xl font-700">Programează o evaluare · {className}</h3>
       <p className="mt-1 text-sm text-muted">SchoolPilot îți arată zilele cele mai libere ale clasei.</p>
       <div className="mt-4 space-y-4">
-        <Field label="Materie"><SubjectSelect subjects={mySubs.length ? mySubs : t.subjectCatalog} value={subject} onChange={setSubject} /></Field>
+        <Field label="Materie"><SubjectSelect subjects={mySubs} value={subject} onChange={setSubject} /></Field>
         <div><span className="mb-1 block text-[12px] font-700 text-muted">Tip</span>
           <div className="flex gap-1.5">{['test', 'quiz', 'tema'].map((k) => <button key={k} onClick={() => setType(k)} className={cx('flex-1 rounded-lg px-2 py-2 text-[13px] font-700 ring-1', type === k ? 'bg-brand text-white ring-brand' : 'bg-white text-ink ring-line hover:bg-paper')}>{TYPE_LABEL[k]}</button>)}</div>
         </div>
@@ -1545,7 +1581,7 @@ function ScheduleTest({ t, classId, className, suggestions, onClose, onSaved }) 
           {dictateErr && <p role="alert" className="mt-1 text-[12px] text-heat-heavy">{dictateErr}</p>}
         </Field>
       </div>
-      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" onClick={save}>Programează</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
+      <div className="mt-5 flex gap-2"><ShimmerButton className="flex-1" disabled={busy} onClick={save}>{busy ? 'Se programează…' : 'Programează'}</ShimmerButton><button onClick={onClose} className="rounded-xl border border-line px-4 font-700 text-muted hover:bg-paper">Anulează</button></div>
     </Modal>
   );
 }
@@ -1654,9 +1690,10 @@ function SchoolEvents({ school, canPost }) {
   const load = useCallback(() => API.get(url).then(setData).catch(toastError), [url]);
   useEffect(() => { load(); }, [load]);
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
-  const save = () => API.post('/api/events', { ...form, schoolId: school ? school.id : undefined }).then(() => {
+  const [, once] = useBusy();
+  const save = once(() => API.post('/api/events', { ...form, schoolId: school ? school.id : undefined }).then(() => {
     toast.success('Evenimentul a fost adăugat.'); setAdding(false); setForm({ title: '', date: '', kind: 'club', note: '' }); return load();
-  }).catch(toastError);
+  }).catch(toastError));
   const del = async (e) => {
     if (!await askConfirm({ title: `Ștergi evenimentul „${e.title}”?`, body: 'Elevii nu îl vor mai vedea.', action: 'Șterge evenimentul' })) return;
     API.del(`/api/events/${e.id}`).then(() => { toast.success('Evenimentul a fost șters.'); return load(); }).catch(toastError);
@@ -1698,7 +1735,7 @@ function Messages({ student, onRead, upcoming = [] }) {
   const load = useCallback(() => API.get('/api/messages').then((d) => { setErr(null); setData(d); }).catch((e) => setErr(errText(e))), []);
   useEffect(() => { load(); }, [load]);
   const open = (k, name) => { setKey(k); setTitle(name); };
-  if (key) return <MessageThread threadKey={key} title={title} student={student} upcoming={upcoming} quiet={data.quietHours} onOpened={onRead} onBack={() => { setKey(null); load(); onRead(); }} />;
+  if (key) return <MessageThread threadKey={key} title={title} student={student} upcoming={upcoming} subjects={((data.contacts.find((c) => `user:${c.id}` === key)) || {}).subjects} quiet={data.quietHours} onOpened={onRead} onMoved={(k) => { setKey(k); setTitle('Întrebare anonimă'); load(); }} onBack={() => { setKey(null); load(); onRead(); }} />;
   const known = data ? data.threads.map((t) => t.key) : [];
   const others = data ? data.contacts.filter((c) => !known.includes(`user:${c.id}`)).sort(byFamily) : [];
   const contactOptions = others.map((c) => ({ value: String(c.id), label: c.name, hint: c.detail }));
@@ -1721,26 +1758,32 @@ function Messages({ student, onRead, upcoming = [] }) {
     </div>
   );
 }
-function MessageThread({ threadKey, title, student, upcoming, quiet, onOpened, onBack }) {
+function MessageThread({ threadKey, title, student, upcoming, quiet, subjects, onOpened, onMoved, onBack }) {
+  const anonThread = threadKey.startsWith('anon:');
   const [rows, setRows] = useState(null);
   const [text, setText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => API.get(`/api/messages/thread?key=${encodeURIComponent(threadKey)}`).then((d) => setRows(d.messages)).catch(toastError), [threadKey]);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = useCallback(() => API.get(`/api/messages/thread?key=${encodeURIComponent(threadKey)}`).then((d) => { setLoadErr(null); setRows(d.messages); }).catch((e) => setLoadErr(errText(e))), [threadKey]);
   useEffect(() => { load().then(() => onOpened && onOpened()); }, [load]); // the server marked them read: clear the badge now
   const send = () => {
     if (!text.trim()) return;
     setBusy(true);
     API.post('/api/messages', { thread: threadKey, body: text, anonymous }).then((r) => {
-      setText(''); if (r.delayed) toast.info('Îl va vedea dimineața, la ora 7.'); return load();
+      setText(''); setAnonymous(false); if (r.delayed) toast.info('Îl va vedea dimineața, la ora 7.');
+      if (r.thread && r.thread !== threadKey) { toast.success('Întrebarea anonimă are acum conversația ei.'); return onMoved && onMoved(r.thread); }
+      return load();
     }).catch(toastError).finally(() => setBusy(false));
   };
-  const answers = student && /când|cand|lucrare|test|tem[aă]|evaluare/i.test(text) ? upcoming.slice(0, 3) : [];
+  // only this teacher's subjects (when we know them): asking the maths teacher shouldn't suggest the history homework
+  const answers = student && /când|cand|lucrare|test|tem[aă]|evaluare/i.test(text) ? upcoming.filter((u) => !subjects || subjects.includes(u.subject)).slice(0, 3) : [];
   return (
     <div>
       <button onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-sm font-700 text-muted hover:text-ink"><Icons.chevL size={16} /> Mesaje</button>
       <h1 className="mb-3 font-display text-2xl font-700 leading-tight">{title}</h1>
-      {!rows ? <div className="p-6 text-muted"><Spinner size={16} /> …</div>
+      {loadErr && !rows ? <LoadFailed err={loadErr} retry={load} />
+        : !rows ? <div className="p-6 text-muted"><Spinner size={16} /> …</div>
         : rows.length === 0 ? <p className="mb-3 rounded-xl2 border border-line bg-white p-5 text-center text-[13px] text-muted">Începe conversația.</p>
         : <div className="mb-3 space-y-2">{rows.map((m) => (
           <div key={m.id} className={cx('flex', m.mine ? 'justify-end' : 'justify-start')}>
@@ -1753,7 +1796,8 @@ function MessageThread({ threadKey, title, student, upcoming, quiet, onOpened, o
       {answers.length > 0 && <div className="mb-3 rounded-xl border border-line bg-white p-3 text-[13px]"><p className="mb-1 font-700">Poate găsești răspunsul aici:</p><ul>{answers.map((u) => <li key={u.id}>{fmtDate(u.date)} · {u.title} ({u.subjectName})</li>)}</ul></div>}
       {student && text === '' && <div className="mb-2 flex flex-wrap gap-1.5">{MESSAGE_TEMPLATES.map((t) => <button key={t} onClick={() => setText(`${t} `)} className="rounded-lg bg-white px-2.5 py-1.5 text-left text-[12.5px] font-600 text-muted ring-1 ring-line hover:bg-paper">{t}</button>)}</div>}
       <textarea value={text} rows={3} maxLength={1000} onChange={(e) => setText(e.target.value)} aria-label="Mesaj" placeholder="Scrie un mesaj…" className="w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand" />
-      {student && <label className="mt-1.5 flex items-center gap-2 text-[13px] text-muted"><input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> Trimite anonim: profesorul nu vede cine întreabă</label>}
+      {student && anonThread && <p className="mt-1.5 text-[13px] text-muted">Conversație anonimă: profesorul nu vede cine scrie.</p>}
+      {student && !anonThread && <label className="mt-1.5 flex items-center gap-2 text-[13px] text-muted"><input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> Trimite anonim: profesorul nu vede cine întreabă</label>}
       <ShimmerButton className="mt-2 w-full" icon={<Icons.send size={16} />} disabled={busy || !text.trim()} onClick={send}>Trimite</ShimmerButton>
       {student && <p className="mt-2 text-center text-[12px] text-muted">Între {quiet[0]}:00 și {String(quiet[1]).padStart(2, '0')}:00, mesajele așteaptă până dimineața.</p>}
     </div>
@@ -1893,9 +1937,9 @@ function StudentToday({ s, reload, onGoto }) {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2"><span className={cx('min-w-0 truncate text-[15px] font-700 leading-tight', c.change && c.change.kind === 'cancelled' && 'text-muted line-through')}>{c.subjectName}</span>{c.current && <Pill tone="brand">acum</Pill>}</div>
                         {c.change && <div className="mt-0.5 text-[12.5px] font-700 text-heat-busy">{c.change.label}</div>}
-                        {c.teacher && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.teacher}</div>}
+                        {(c.change?.substitute || c.teacher) && <div className="mt-0.5 truncate text-[12.5px] text-muted">{c.change?.substitute || c.teacher}</div>}
                       </div>
-                      <span className="shrink-0 rounded-lg bg-paper px-2.5 py-1 text-[12.5px] font-600" style={{ color: 'var(--color-ink-2)' }}>{c.room || '—'}</span>
+                      <span className="shrink-0 rounded-lg bg-paper px-2.5 py-1 text-[12.5px] font-600" style={{ color: 'var(--color-ink-2)' }}>{(c.change?.kind === 'room' && c.change.room) || c.room || '—'}</span>
                     </motion.li>
                   ))}
                 </ul>
@@ -2009,7 +2053,7 @@ const exportCalendar = () => API.get('/api/calendar').then((d) => {
   link.href = URL.createObjectURL(new Blob([d.ics], { type: 'text/calendar' }));
   link.download = 'schoolpilot.ics';
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000); // Safari/Firefox need the URL a moment after click()
   toast.success('Calendarul a fost descărcat.');
 }).catch(toastError);
 function StudentTimetable({ s }) {
@@ -2051,7 +2095,7 @@ function GradesPanel({ s, reload }) {
   const mean = (l) => l.reduce((n, x) => n + x.v, 0) / l.length;
   const subjects = mod === 0 ? g.subjects : g.subjects.map((sub) => {
     const values = sub.values.filter((v) => v.module === mod);
-    return values.length ? { ...sub, values, avg: mean(values), risk: mean(values) < 6 } : null;
+    return values.length ? { ...sub, values, avg: mean(values), risk: mean(values) < 5.5 } : null;
   }).filter(Boolean);
   return (
     <div>
@@ -2542,6 +2586,7 @@ function Root() {
   };
   useEffect(() => {
     onUnauthorized = () => { if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.'); };
+    onMustChangePassword = () => { loadMe().catch((e) => toLogin(errText(e))); };
     // Never trap the user on the boot spinner: if the session check or /api/me stalls — e.g. a
     // stored token that can't reach Supabase — fall back to the login screen after a short guard.
     let settled = false;
@@ -2559,7 +2604,7 @@ function Root() {
   if (phase === 'error') return <AuthCard sub="Autentificare"><FormError>Nu pot contacta serverul: {notice}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</FormError></AuthCard>;
   if (phase === 'landing') return <Landing onLogin={() => setPhase('login')} />;
   if (phase === 'login' || !account) return <Login onSignedIn={loadMe} notice={notice} onHome={() => { setNotice(null); setPhase('landing'); window.scrollTo(0, 0); }} />;
-  if (phase === 'change') return <ChangePassword account={account} onDone={loadMe} onLogout={logout} />;
+  if (phase === 'change') return <ChangePassword account={account} onDone={() => loadMe().catch((e) => toLogin(errText(e)))} onLogout={logout} />;
   if (account.role === 'admin') return <AdminApp account={account} onLogout={logout} />;
   if (account.role === 'teacher') return <TeacherApp account={account} onLogout={logout} />;
   return <StudentApp account={account} onLogout={logout} />;

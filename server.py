@@ -95,6 +95,11 @@ EVENT_KINDS = {"club": "Club", "olimpiada": "Olimpiadă", "concurs": "Concurs", 
 QUIET_START, QUIET_END = 20, 7  # messages to teachers wait until the morning
 EVENING_HOUR = 15  # from this hour the student's Azi page also shows the next school day
 RISK_AVERAGE = 6
+MUST_CHANGE_MSG = "Trebuie să îți setezi o parolă nouă."
+
+def below_risk(avg):
+    """Risk zone: the average ROUNDS below 6 (x.50 rounds up), so 5.50 is not at risk."""
+    return avg is not None and avg < RISK_AVERAGE - 0.5
 TYPE_W = {"test": 3, "quiz": 2, "tema": 1}
 TYPE_LABEL = {"test": "Lucrare", "quiz": "Ascultare", "tema": "Temă"}
 DAYNAMES = ["Lun", "Mar", "Mie", "Joi", "Vin", "Sâm", "Dum"]
@@ -108,7 +113,10 @@ def today():
     return date.today()
 
 def week_monday(d=None):
+    """Monday of the school week: on Saturday and Sunday that is the coming Monday."""
     d = d or today()
+    if d.weekday() > 4:
+        return d + timedelta(days=7 - d.weekday())
     return d - timedelta(days=d.weekday())
 
 def iso(d):
@@ -446,6 +454,9 @@ def remove_users(con, rows):
         con.execute("UPDATE announcements SET author_id=NULL WHERE author_id=?", (uid,))
         con.execute("UPDATE school_events SET author_id=NULL WHERE author_id=?", (uid,))
         con.execute("DELETE FROM messages WHERE sender_id=? OR recipient_id=?", (uid, uid))
+        for c in con.execute("SELECT id FROM lesson_changes WHERE author_id=?", (uid,)).fetchall():  # nobody else could ever remove them
+            drop_notifications(con, "change:%d" % c["id"])
+            con.execute("DELETE FROM lesson_changes WHERE id=?", (c["id"],))
         for t in ("timetable", "assessments", "grades", "absences", "lesson_changes"):
             con.execute("UPDATE %s SET teacher_id=NULL WHERE teacher_id=?" % t, (uid,))
         con.execute("UPDATE classes SET homeroom_teacher_id=NULL WHERE homeroom_teacher_id=?", (uid,))
@@ -472,18 +483,24 @@ def notify_class_assessment(con, assessment_id, class_id, subject, kind, day, ti
     for s in con.execute("SELECT id FROM users WHERE role='student' AND class_id=?", (class_id,)).fetchall():
         notify(con, s["id"], "assessment", text, "Pe %s" % date_text(day), "assessment:%d" % assessment_id)
 
+def next_school_day(d):
+    d = d + timedelta(days=1)
+    while d.weekday() > 4:
+        d += timedelta(days=1)
+    return d
+
 def add_due_reminders(con, uid, class_id):
     """One reminder per test or assignment, the first time we see it is due today or tomorrow.
     Skipped when the pupil was told about it today, so a late one doesn't arrive twice."""
     t = today()
-    for a in con.execute("SELECT * FROM assessments WHERE class_id=? AND date IN (?,?)",
-                         (class_id, iso(t), iso(t + timedelta(days=1)))).fetchall():
+    for a in con.execute("SELECT * FROM assessments WHERE class_id=? AND date>=? AND date<=?",
+                         (class_id, iso(t), iso(next_school_day(t)))).fetchall():
         ref = "reminder:%d" % a["id"]
         if con.execute("""SELECT 1 FROM notifications WHERE student_id=?
                           AND (ref=? OR (ref=? AND created_at>=?))""",
                        (uid, ref, "assessment:%d" % a["id"], iso(t))).fetchone():
             continue
-        when = "azi" if a["date"] == iso(t) else "mâine"
+        when = "azi" if a["date"] == iso(t) else ("mâine" if a["date"] == iso(t + timedelta(days=1)) else "luni")
         what = TYPE_LABEL.get(a["type"], "Evaluare")
         notify(con, uid, "reminder", "%s %s" % (what, when) + ("" if a["title"] == what else ": %s" % a["title"]),
                subj_name(a["subject"]), ref)
@@ -522,7 +539,7 @@ def build_calendar(con, me):
     entries = []
     if me["class_id"]:
         for a in con.execute("SELECT * FROM assessments WHERE class_id=? AND date>=?", (me["class_id"], iso(today()))).fetchall():
-            entries.append(("a%d" % a["id"], a["date"], "%s: %s (%s)" % (TYPE_LABEL[a["type"]], a["title"], subj_name(a["subject"]))))
+            entries.append(("a%d" % a["id"], a["date"], "%s: %s (%s)" % (TYPE_LABEL.get(a["type"], "Evaluare"), a["title"], subj_name(a["subject"]))))
     for e in con.execute("SELECT * FROM school_events WHERE school_id=? AND date>=?", (me["school_id"], iso(today()))).fetchall():
         entries.append(("e%d" % e["id"], e["date"], e["title"]))
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -544,7 +561,7 @@ def class_insights(con, class_id):
                                WHERE u.class_id=? AND a.kind='unexcused'""", (class_id,)).fetchone()["n"]
     return {"clashes": len(wl["collisions"]), "busiest": busiest["dateLabel"] if busiest["score"] else None,
             "average": round(sum(g["a"] for g in grades) / len(grades), 2) if grades else None,
-            "atRisk": sum(1 for g in grades if g["a"] < RISK_AVERAGE), "unexcused": unexcused}
+            "atRisk": sum(1 for g in grades if below_risk(g["a"])), "unexcused": unexcused}
 
 def message_contacts(con, me):
     """Students talk only to the teachers of their class; never to each other."""
@@ -557,7 +574,7 @@ def message_contacts(con, me):
         out = []
         for r in rows:
             subjects = teacher_subjects(con, r["id"], me["class_id"])
-            out.append({"id": r["id"], "name": r["name"], "detail": ", ".join(subj_short(c) for c in subjects)})
+            out.append({"id": r["id"], "name": r["name"], "detail": ", ".join(subj_short(c) for c in subjects), "subjects": subjects})
         return out
     if me["role"] == "teacher":
         ids = announcement_class_ids(con, me["id"])
@@ -585,9 +602,13 @@ def build_threads(con, me):
     uid, now, threads = me["id"], datetime.now().isoformat(timespec="seconds"), {}
     rows = con.execute("SELECT * FROM messages WHERE (sender_id=? OR (recipient_id=? AND visible_at<=?)) ORDER BY id", (uid, uid, now)).fetchall()
     for r in rows:
-        if me["role"] == "teacher" and r["anonymous"]:  # never tied to the student's name on the teacher's side
+        if r["anonymous"]:  # its own thread; on the teacher's side never tied to the student's name
             root = r["reply_to"] or r["id"]
-            key, name, other = "anon:%d" % root, "Întrebare anonimă", None
+            if me["role"] == "teacher":
+                key, name, other = "anon:%d" % root, "Întrebare anonimă", None
+            else:
+                teacher = r["recipient_id"] if r["sender_id"] == uid else r["sender_id"]
+                key, name, other = "anon:%d" % root, "Întrebare anonimă · %s" % ((user_row(con, teacher) or {"name": "Cont șters"})["name"]), None
         else:
             other = r["recipient_id"] if r["sender_id"] == uid else r["sender_id"]
             key, name = "user:%d" % other, (user_row(con, other) or {"name": "Cont șters"})["name"]
@@ -600,14 +621,12 @@ def build_threads(con, me):
 def thread_rows(con, me, key):
     uid, now = me["id"], datetime.now().isoformat(timespec="seconds")
     if key.startswith("anon:"):
-        need(me, "teacher")
         root = int(key[5:])
         return con.execute("""SELECT * FROM messages WHERE anonymous=1 AND (id=? OR reply_to=?) AND (sender_id=? OR recipient_id=?)
                               AND (sender_id=? OR visible_at<=?) ORDER BY id""", (root, root, uid, uid, uid, now)).fetchall()
     other = int(key[5:])
-    hide_anon = "AND anonymous=0" if me["role"] == "teacher" else ""
-    return con.execute("""SELECT * FROM messages WHERE ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=? AND visible_at<=?)) %s
-                          ORDER BY id""" % hide_anon, (uid, other, other, uid, now)).fetchall()
+    return con.execute("""SELECT * FROM messages WHERE ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=? AND visible_at<=?))
+                          AND anonymous=0 ORDER BY id""", (uid, other, other, uid, now)).fetchall()
 
 def send_message(con, me, body):
     need(me, "student", "teacher")
@@ -616,12 +635,13 @@ def send_message(con, me, body):
         raise HttpError(400, "Mesajul are între 1 și 1000 de caractere.")
     moment, anonymous, reply_to = datetime.now(), 0, None
     key = body.get("thread") or ""
-    if key.startswith("anon:"):  # a teacher answering an anonymous question
-        need(me, "teacher")
-        q = con.execute("SELECT * FROM messages WHERE id=? AND anonymous=1 AND recipient_id=?", (int(key[5:]), me["id"])).fetchone()
-        if not q:
+    if key.startswith("anon:"):  # inside an anonymous exchange: the teacher answers, the student follows up
+        q = con.execute("SELECT * FROM messages WHERE id=? AND anonymous=1 AND (recipient_id=? OR sender_id=?)",
+                        (int(key[5:]), me["id"], me["id"])).fetchone()
+        if not q or (me["role"] == "teacher") != (q["recipient_id"] == me["id"]):
             raise HttpError(404, "not found")
-        to, anonymous, reply_to = q["sender_id"], 1, q["id"]
+        to = q["sender_id"] if me["role"] == "teacher" else q["recipient_id"]
+        anonymous, reply_to = 1, q["id"]
     else:
         to = int(key[5:]) if key.startswith("user:") else int(body["to"])
         if to not in [c["id"] for c in message_contacts(con, me)]:
@@ -632,6 +652,8 @@ def send_message(con, me, body):
                       (me["id"], to, text, anonymous, reply_to, moment.isoformat(timespec="seconds"), visible.isoformat(timespec="seconds")))
     if me["role"] == "teacher":
         notify(con, to, "message", "Mesaj de la %s" % me["name"], text[:80], "message:%d" % cur.lastrowid)
+    if anonymous and not key.startswith("anon:"):  # a new anonymous question starts its own thread
+        key = "anon:%d" % cur.lastrowid
     return {"id": cur.lastrowid, "delayed": visible > moment, "thread": key or "user:%d" % to}
 
 def change_label(r, con):
@@ -642,11 +664,12 @@ def change_label(r, con):
         if re.match(r"(?i)(sala|sală|lab|laborator|atelier|cabinet|amfiteatru)\b", room):  # "Sala 21", "Lab F"
             return "Mutată în %s" % room
         return "Mutată în sala %s" % room  # "A24"
-    return "Suplinire: %s" % teacher_name(con, r["teacher_id"])
+    return "Suplinire: %s" % (teacher_name(con, r["teacher_id"]) or "profesor șters")
 
 def change_row(con, r):
     slot = con.execute("SELECT * FROM timetable WHERE id=?", (r["timetable_id"],)).fetchone()
     return {"id": r["id"], "timetableId": r["timetable_id"], "date": r["date"], "kind": r["kind"], "label": change_label(r, con), "note": r["note"] or "",
+            "room": r["room"] or "", "substitute": (teacher_name(con, r["teacher_id"]) or "profesor șters") if r["kind"] == "substitute" else "",
             "subjectName": subj_name(slot["subject"]) if slot else "", "className": class_name(con, r["class_id"]),
             "time": slot_time(slot) if slot else ""}
 
@@ -665,6 +688,8 @@ def save_lesson_change(con, me, body, now):
         raise HttpError(400, "Data nu este validă.")
     if day < today() or day.weekday() != slot["day"]:
         raise HttpError(400, "Alege o dată viitoare, în ziua acestei ore.")
+    if not module_of(school_modules(con, me["school_id"]), iso(day)):
+        raise HttpError(400, "În ziua aleasă e vacanță, nu sunt ore.")
     kind, room, substitute = body.get("kind"), (body.get("room") or "").strip()[:40], None
     if kind == "room" and not room:
         raise HttpError(400, "Scrie sala nouă.")
@@ -734,10 +759,14 @@ def subject_average(con, student_id, subject):
     v = con.execute("SELECT AVG(value) a FROM grades WHERE student_id=? AND subject=?", (student_id, subject)).fetchone()["a"]
     return round(v, 2) if v is not None else None
 
-def alert_if_at_risk(con, student_id, subject, before, ref):
-    """Tell the student once, when their average drops below the risk line."""
+def alert_if_at_risk(con, student_id, subject):
+    """One risk alert per subject while the average is below the line; it goes away once the
+    average recovers (or the grade that caused it is deleted), so a later drop warns again."""
+    ref = "risk:%d:%s" % (student_id, subject)
     after = subject_average(con, student_id, subject)
-    if after is not None and after < RISK_AVERAGE and (before is None or before >= RISK_AVERAGE):
+    if not below_risk(con.execute("SELECT AVG(value) a FROM grades WHERE student_id=? AND subject=?", (student_id, subject)).fetchone()["a"]):
+        drop_notifications(con, ref)
+    elif not con.execute("SELECT 1 FROM notifications WHERE student_id=? AND ref=?", (student_id, ref)).fetchone():
         notify(con, student_id, "risk", "Risc de corigență la %s" % subj_name(subject), "Media ta este acum %.2f." % after, ref)
 
 def unread_count(con, uid):
@@ -870,13 +899,31 @@ def need_student_subject(con, me, student_id, subject):
         raise HttpError(404, "Elevul nu există.")
     need_subject(con, me, s["class_id"], subject)
 
-def entry_date(value):
+def school_day(con, school_id, value):
+    """An ISO date from the request that is today or later, a weekday and inside a module."""
+    try:
+        d = parse_iso(value)
+    except (TypeError, ValueError):
+        raise HttpError(400, "Data nu este validă.")
+    if d < today():
+        raise HttpError(400, "Alege o dată de azi încolo.")
+    if d.weekday() > 4 or not module_of(school_modules(con, school_id), iso(d)):
+        raise HttpError(400, "În ziua aleasă nu sunt ore (weekend sau vacanță).")
+    return iso(d)
+
+def entry_date(value, modules=None, weekday=False):
+    """A past or present date for a grade or absence, within this school year."""
     try:
         d = parse_iso(value) if value else today()
     except (TypeError, ValueError):
         raise HttpError(400, "Data nu este validă.")
     if d > today():
         raise HttpError(400, "Data nu poate fi în viitor.")
+    if modules:
+        if iso(d) < modules[0]["start"]:
+            raise HttpError(400, "Data este dinaintea începutului anului școlar (%s)." % date_text(modules[0]["start"]))
+        if weekday and (d.weekday() > 4 or not module_of(modules, iso(d))):
+            raise HttpError(400, "În ziua aleasă nu au fost ore (weekend sau vacanță).")
     return iso(d)
 
 def grade_value(value):
@@ -1016,11 +1063,11 @@ def class_workload(con, class_id):
         for i in range(5):
             d = mon + timedelta(days=w * 7 + i)
             items = by_day.get(iso(d), [])
-            score = sum(TYPE_W[it["type"]] for it in items)
+            score = sum(TYPE_W.get(it["type"], 0) for it in items)
             graded = [it for it in items if it["type"] != "tema"]
             days.append({"date": iso(d), "dateLabel": day_label(d), "score": score,
                          "heat": heat_of(score), "clash": len(graded) >= 2,
-                         "items": [{"subject": it["subject"], "type": it["type"],
+                         "items": [{"id": it["id"], "teacherId": it["teacher_id"], "subject": it["subject"], "type": it["type"],
                                     "short": subj_short(it["subject"]), "title": it["title"]} for it in items]})
         weeks.append({"label": "Săptămâna aceasta" if w == 0 else "Săptămâna viitoare", "days": days})
     flat = [d for wk in weeks for d in wk["days"]]
@@ -1171,9 +1218,10 @@ def build_student(con, uid):
     now = datetime.now()
     now_min = now.hour * 60 + now.minute
     modules = school_modules(con, u["school_id"])
-    module = module_status(modules, iso(today()))
+    shown = week_monday() if is_weekend else today()  # weekends preview Monday: its module and its changes
+    module = module_status(modules, iso(shown))
     changes = class_changes(con, cid) if cid else []
-    change_today = {c["timetableId"]: c for c in changes if c["date"] == iso(today())}
+    change_today = {c["timetableId"]: c for c in changes if c["date"] == iso(shown)}
     classes_today = sorted(({**cell, "change": change_today.get(cell["id"]), "current": (not is_weekend) and minutes(cell["time"]) <= now_min < minutes(cell["end"])}
                             for cell in tt[idx] if cell and not module["holiday"]), key=lambda c: c["time"])
     pack = pack_list(classes_today, "Caietele de azi")
@@ -1184,18 +1232,20 @@ def build_student(con, uid):
     for a in assess:
         dd = parse_iso(a["date"])
         delta = (dd - t).days
-        if 0 <= delta <= 1:
+        if t <= dd <= next_school_day(t):
             due.append({"id": "a%d" % a["id"], "title": a["title"], "subject": a["subject"],
-                        "short": subj_short(a["subject"]), "typeLabel": TYPE_LABEL[a["type"]],
+                        "short": subj_short(a["subject"]), "typeLabel": TYPE_LABEL.get(a["type"], "Evaluare"),
                         "bucket": "today" if delta == 0 else "tomorrow",
-                        "dueLabel": "azi" if delta == 0 else "mâine", "kind": "assessment"})
+                        "dueLabel": "azi" if delta == 0 else ("mâine" if delta == 1 else "luni"), "kind": "assessment"})
     # personal tasks
     tasks = []
     for r in con.execute("SELECT * FROM tasks WHERE student_id=? ORDER BY done, due", (uid,)).fetchall():
         bucket, dl = "later", ""
         if r["due"]:
             delta = (parse_iso(r["due"]) - t).days
-            if delta <= 0:
+            if delta < 0:
+                bucket, dl = "today", "întârziată · %s" % day_label(parse_iso(r["due"]))
+            elif delta == 0:
                 bucket, dl = "today", "azi"
             elif delta == 1:
                 bucket, dl = "tomorrow", "mâine"
@@ -1221,7 +1271,9 @@ def build_student(con, uid):
             else:
                 col.append({**cell, "assessment": amap.get(dkey, {}).get(cell["subject"])})
         days.append(col)
-    week_lbl = "%d–%d %s" % (mon.day, (mon + timedelta(days=4)).day, MONTHS[(mon + timedelta(days=4)).month])
+    fri = mon + timedelta(days=4)
+    week_lbl = ("%d–%d %s" % (mon.day, fri.day, MONTHS[fri.month]) if mon.month == fri.month
+                else "%d %s – %d %s" % (mon.day, MONTHS[mon.month], fri.day, MONTHS[fri.month]))
     # grades
     grades = build_grades(con, uid)
     absences = build_absences(con, uid)
@@ -1232,8 +1284,8 @@ def build_student(con, uid):
                         key=lambda g: (g["d"], g["id"]), reverse=True)
     label = "%s, %d %s" % (FULLDAYS[wd], t.day, MONTHS[t.month])
     workload = class_workload(con, cid) if cid else None
-    upcoming = [{"id": a["id"], "date": a["date"], "subjectName": subj_name(a["subject"]), "hue": subj_hue(a["subject"]),
-                 "type": a["type"], "typeLabel": TYPE_LABEL[a["type"]], "title": a["title"]}
+    upcoming = [{"id": a["id"], "date": a["date"], "subject": a["subject"], "subjectName": subj_name(a["subject"]), "hue": subj_hue(a["subject"]),
+                 "type": a["type"], "typeLabel": TYPE_LABEL.get(a["type"], "Evaluare"), "title": a["title"]}
                 for a in assess if a["date"] >= iso(t)]
     excuse_due = [{"id": r["id"], "subjectName": subj_name(r["subject"]), "date": r["date"], "until": iso(parse_iso(r["date"]) + timedelta(days=7))}
                   for r in con.execute("SELECT * FROM absences WHERE student_id=? AND kind='unexcused' AND date>=? ORDER BY date",
@@ -1250,7 +1302,7 @@ def build_student(con, uid):
                   "nextDay": next_day_brief(tt, modules, now.hour), "module": module, "changes": changes[:5], "excuseDue": excuse_due,
                   "forecast": stress_forecast(workload["collisions"], grades["subjects"]) if workload else None,
                   "due": due + due_tasks, "newGrades": new_grades},
-        "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": idx},
+        "timetable": {"periods": PERIODS, "days": days, "weekLabel": week_lbl, "todayIdx": None if is_weekend else idx},
         "tasks": tasks,
         "grades": grades, "absences": absences,
         "workload": workload, "upcoming": upcoming, "unreadMessages": unread_messages(con, uid),
@@ -1269,7 +1321,7 @@ def build_grades(con, student_id):
         vals = [r["value"] for r in lst]
         avg = round(sum(vals) / len(vals), 2)
         subs.append({"code": code, "name": subj_name(code), "hue": subj_hue(code), "short": subj_short(code),
-                     "avg": avg, "annual": annual_average(vals), "risk": avg < RISK_AVERAGE,
+                     "avg": avg, "annual": annual_average(vals), "risk": below_risk(sum(vals) / len(vals)),
                      "values": [{"id": r["id"], "v": r["value"], "d": r["date"], "note": r["note"], "module": module_of(modules, r["date"]),
                                  "teacher": teacher_name(con, r["teacher_id"])} for r in lst]})
     goals = {r["subject"]: r["target"] for r in con.execute("SELECT * FROM subject_goals WHERE student_id=?", (student_id,)).fetchall()}
@@ -1279,7 +1331,8 @@ def build_grades(con, student_id):
             sub["goal"] = {"target": target, "reached": sub["annual"] >= target,
                            **grades_needed([v["v"] for v in sub["values"]], target, 10)}
     subs.sort(key=lambda s: s["name"])
-    overall = round(sum(s["annual"] for s in subs) / len(subs), 2) if subs else 0  # mean of the rounded annual averages
+    # mean of the rounded annual averages, kept to two decimals without rounding (9, 10, 10 -> 9.66)
+    overall = (sum(s["annual"] for s in subs) * 100 // len(subs)) / 100 if subs else 0
     best = max(subs, key=lambda s: s["avg"]) if subs else None
     worst = min(subs, key=lambda s: s["avg"]) if subs else None
     return {"overall": overall, "subjects": subs, "modules": [m["number"] for m in modules],
@@ -1411,7 +1464,7 @@ class Handler(BaseHTTPRequestHandler):
             con.commit()
             me = user_row(con, me["id"])
         if info["must_change"] and p != "/api/me":
-            raise HttpError(403, "Trebuie să îți setezi o parolă nouă.")
+            raise HttpError(403, MUST_CHANGE_MSG)
         return me, info
 
     def _api(self, fn):
@@ -1422,7 +1475,10 @@ class Handler(BaseHTTPRequestHandler):
                 con.commit()
                 self._json(res if res is not None else {"ok": True})
             except HttpError as e:
-                self._json({"error": e.msg}, e.code)
+                payload = {"error": e.msg}
+                if e.msg == MUST_CHANGE_MSG:  # the app then shows "Setează o parolă nouă"
+                    payload["mustChangePassword"] = True
+                self._json(payload, e.code)
             except KeyError as e:
                 self._json({"error": "missing field %s" % e}, 400)
             except Exception as e:
@@ -1553,8 +1609,12 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---------- admin: classes ----------
         if p == "/api/classes" and method == "POST":
-            cur = con.execute("INSERT INTO classes(school_id,name) VALUES(?,?)",
-                              (int(body["schoolId"]), (body["name"] or "").strip()))
+            name = (body.get("name") or "").strip()[:20]
+            if not name:
+                raise HttpError(400, "Scrie numele clasei.")
+            if con.execute("SELECT 1 FROM classes WHERE school_id=? AND lower(name)=lower(?)", (int(body["schoolId"]), name)).fetchone():
+                raise HttpError(400, "Clasa %s există deja." % name)
+            cur = con.execute("INSERT INTO classes(school_id,name) VALUES(?,?)", (int(body["schoolId"]), name))
             return {"id": cur.lastrowid}
         m = re.match(r"^/api/classes/(\d+)$", p)
         if m and method == "DELETE":
@@ -1562,6 +1622,8 @@ class Handler(BaseHTTPRequestHandler):
             con.execute("DELETE FROM timetable WHERE class_id=?", (cid,))
             for a in con.execute("SELECT id FROM announcements WHERE class_id=?", (cid,)).fetchall():
                 delete_announcement(con, a["id"])
+            for c in con.execute("SELECT id FROM lesson_changes WHERE class_id=?", (cid,)).fetchall():
+                drop_notifications(con, "change:%d" % c["id"])
             con.execute("DELETE FROM lesson_changes WHERE class_id=?", (cid,))
             for a in con.execute("SELECT id FROM assessments WHERE class_id=?", (cid,)).fetchall():
                 drop_notifications(con, "assessment:%d" % a["id"], "reminder:%d" % a["id"])
@@ -1622,6 +1684,8 @@ class Handler(BaseHTTPRequestHandler):
             return {"id": cur.lastrowid}
         m = re.match(r"^/api/timetable/(\d+)$", p)
         if m and method == "DELETE":
+            for c in con.execute("SELECT id FROM lesson_changes WHERE timetable_id=?", (int(m.group(1)),)).fetchall():
+                drop_notifications(con, "change:%d" % c["id"])
             con.execute("DELETE FROM lesson_changes WHERE timetable_id=?", (int(m.group(1)),))
             con.execute("DELETE FROM timetable WHERE id=?", (int(m.group(1)),))
             return {"ok": True}
@@ -1685,12 +1749,15 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/assessments" and method == "POST":
             need(me, "teacher")
             cid = int(body["classId"])
-            need_class(con, me, cid)
+            need_subject(con, me, cid, body.get("subject"))  # only a subject they teach in this class
             kind = body.get("type", "test")
-            title = body.get("title") or TYPE_LABEL.get(kind, "Evaluare")
+            if kind not in TYPE_W:
+                raise HttpError(400, "Tipul evaluării nu este valid.")
+            day = school_day(con, me["school_id"], body.get("date"))
+            title = (body.get("title") or "").strip()[:120] or TYPE_LABEL[kind]
             cur = con.execute("INSERT INTO assessments(class_id,subject,type,date,title,teacher_id) VALUES(?,?,?,?,?,?)",
-                              (cid, body["subject"], kind, body["date"], title, me["id"]))
-            notify_class_assessment(con, cur.lastrowid, cid, body["subject"], kind, body["date"], title)
+                              (cid, body["subject"], kind, day, title, me["id"]))
+            notify_class_assessment(con, cur.lastrowid, cid, body["subject"], kind, day, title)
             return {"ok": True}
         m = re.match(r"^/api/assessments/(\d+)$", p)
         if m and method == "DELETE":
@@ -1728,35 +1795,36 @@ class Handler(BaseHTTPRequestHandler):
         # ---------- teacher: grades ----------
         if p == "/api/grades" and method == "POST":
             need_student_subject(con, me, body["studentId"], body["subject"])
-            value, when, note = grade_value(body["value"]), entry_date(body.get("date")), clean_note(body.get("note"))
-            before = subject_average(con, int(body["studentId"]), body["subject"])
+            value, when, note = grade_value(body["value"]), entry_date(body.get("date"), school_modules(con, me["school_id"])), clean_note(body.get("note"))
             cur = con.execute("INSERT INTO grades(student_id,subject,value,date,teacher_id,note) VALUES(?,?,?,?,?,?)",
                               (int(body["studentId"]), body["subject"], value, when, me["id"], note))
             notify(con, int(body["studentId"]), "grade", "Notă nouă la %s: %s" % (subj_name(body["subject"]), value),
                    " · ".join(x for x in (date_text(when), note, me["name"]) if x), "grade:%d" % cur.lastrowid)
-            alert_if_at_risk(con, int(body["studentId"]), body["subject"], before, "grade:%d" % cur.lastrowid)
+            alert_if_at_risk(con, int(body["studentId"]), body["subject"])
             return {"ok": True}
         m = re.match(r"^/api/grades/(\d+)$", p)
         if m and method == "PATCH":
             r = owned_row(con, "grades", int(m.group(1)), me)
             value = grade_value(body.get("value", r["value"]))
-            before = subject_average(con, r["student_id"], r["subject"])
             con.execute("UPDATE grades SET value=?, date=?, note=? WHERE id=?",
-                        (value, entry_date(body.get("date", r["date"])), clean_note(body.get("note", r["note"])), r["id"]))
+                        (value, entry_date(body.get("date", r["date"]), school_modules(con, me["school_id"])), clean_note(body.get("note", r["note"])), r["id"]))
             if value != r["value"]:
+                drop_notifications(con, "grade:%d" % r["id"])  # replaces "Notă nouă …: <old value>"
                 notify(con, r["student_id"], "grade", "Notă modificată la %s: %s" % (subj_name(r["subject"]), value),
                        "Era %s · %s" % (r["value"], me["name"]), "grade:%d" % r["id"])
-                alert_if_at_risk(con, r["student_id"], r["subject"], before, "grade:%d" % r["id"])
+                alert_if_at_risk(con, r["student_id"], r["subject"])
             return {"ok": True}
         if m and method == "DELETE":
-            con.execute("DELETE FROM grades WHERE id=?", (owned_row(con, "grades", int(m.group(1)), me)["id"],))
+            g = owned_row(con, "grades", int(m.group(1)), me)
+            con.execute("DELETE FROM grades WHERE id=?", (g["id"],))
             drop_notifications(con, "grade:%s" % m.group(1))
+            alert_if_at_risk(con, g["student_id"], g["subject"])
             return {"ok": True}
 
         # ---------- teacher: absences ----------
         if p == "/api/absences" and method == "POST":  # studentId, or studentIds for the whole roll call
             ids = [int(i) for i in body.get("studentIds") or [body["studentId"]]]
-            when = entry_date(body.get("date"))
+            when = entry_date(body.get("date"), school_modules(con, me["school_id"]), weekday=True)
             added = 0
             for sid in ids:
                 need_student_subject(con, me, sid, body["subject"])
@@ -1781,12 +1849,14 @@ class Handler(BaseHTTPRequestHandler):
                     raise HttpError(403, "Doar dirigintele sau profesorul care a notat absența o poate motiva.")
                 con.execute("UPDATE absences SET kind=? WHERE id=?",
                             ("excused" if body["excused"] else "unexcused", r["id"]))
+                if not body["excused"] and r["kind"] == "excused":
+                    con.execute("DELETE FROM notifications WHERE ref=? AND kind='excused'", ("absence:%d" % r["id"],))
                 if body["excused"] and r["kind"] != "excused":
                     notify(con, r["student_id"], "excused", "Absență motivată la %s" % subj_name(r["subject"]),
                            "%s · %s" % (date_text(r["date"]), me["name"]), "absence:%d" % r["id"])
             if "date" in body:
                 owned_row(con, "absences", r["id"], me)
-                when = entry_date(body["date"])
+                when = entry_date(body["date"], school_modules(con, me["school_id"]), weekday=True)
                 if con.execute("SELECT 1 FROM absences WHERE student_id=? AND subject=? AND date=? AND id!=?",
                                (r["student_id"], r["subject"], when, r["id"])).fetchone():
                     raise HttpError(400, "Elevul are deja o absență la această dată.")
