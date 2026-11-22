@@ -1422,8 +1422,11 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/api/messages/thread":
             need(me, "student", "teacher")
             rows = thread_rows(con, me, q["key"][0])
-            con.execute("UPDATE messages SET read_at=? WHERE recipient_id=? AND read_at IS NULL AND id IN (%s)" % (",".join(str(r["id"]) for r in rows) or "NULL"),
+            ids = [r["id"] for r in rows if r["recipient_id"] == me["id"]]
+            con.execute("UPDATE messages SET read_at=? WHERE recipient_id=? AND read_at IS NULL AND id IN (%s)" % (",".join(map(str, ids)) or "NULL"),
                         (datetime.now().isoformat(timespec="seconds"), me["id"]))
+            if ids:  # the bell's "Mesaj de la …" entries for this thread are read too
+                con.executemany("UPDATE notifications SET read=1 WHERE student_id=? AND ref=?", [(me["id"], "message:%d" % i) for i in ids])
             return {"messages": [message_row(r, me["id"]) for r in rows]}
         if p == "/api/announcements":
             if me["role"] == "admin":

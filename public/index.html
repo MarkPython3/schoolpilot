@@ -229,6 +229,7 @@ const Icons = {
   minus: (p) => <Ic {...p}><path d="M5 12h14" /></Ic>,
   calendar: (p) => <Ic {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Ic>,
   trash: (p) => <Ic {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Ic>,
+  home: (p) => <Ic {...p}><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" /></Ic>,
   logout: (p) => <Ic {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Ic>,
   megaphone: (p) => <Ic {...p}><path d="M3 11v2a2 2 0 0 0 2 2h2l10 5V4L7 9H5a2 2 0 0 0-2 2z" /><path d="M20.5 9.5a4 4 0 0 1 0 5M8 15.5V19a2 2 0 0 0 4 0v-1.5" /></Ic>,
   message: (p) => <Ic {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z" /></Ic>,
@@ -511,6 +512,9 @@ function Field({ label, children }) {
 }
 function Input(p) { return <input {...p} className={cx('w-full rounded-xl border border-muted bg-white px-3 py-2.5 text-sm outline-none focus:border-brand', p.className)} />; }
 function initials(name) { return (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase(); }
+// Names are stored first name first ("Elena Popescu"): lists sort by family name, the last word, then the first names.
+function familyKey(name) { const w = (name || '').trim().split(/\s+/); return [w[w.length - 1], ...w.slice(0, -1)].join(' '); }
+function byFamily(a, b) { return familyKey(a.name).localeCompare(familyKey(b.name), 'ro'); }
 function useCountUp(value, dur = 700) {
   const [v, setV] = useState(value); const reduce = useReducedMotion(); const prev = useRef(value);
   useEffect(() => {
@@ -653,12 +657,15 @@ function OrganiserPreview() {
     </div>
   );
 }
-function AuthCard({ sub, children }) {
+function AuthCard({ sub, onHome, children }) {
+  const Brand = ({ className, children: inner }) => onHome
+    ? <button type="button" onClick={onHome} aria-label="Pagina principală" className={cx(className, 'text-left')}>{inner}</button>
+    : <div className={className}>{inner}</div>;
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-paper)' }}>
       <div className="mx-auto min-h-screen w-full max-w-[1600px] lg:grid lg:grid-cols-[1.08fr_minmax(0,500px)]">
       <aside className="window-light relative hidden overflow-hidden px-12 py-12 xl:px-16 lg:flex lg:flex-col lg:justify-between" style={{ background: 'var(--color-paper-2)' }}>
-        <div className="relative flex items-center gap-3"><Logo size={40} /><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p></div>
+        <Brand className="relative flex items-center gap-3 self-start"><Logo size={40} /><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p></Brand>
         <div className="relative max-w-xl">
           <h1 className="font-display font-700 leading-[1.03]" style={{ fontSize: 'clamp(2.4rem, 3.4vw, 3.4rem)' }}>Săptămâna ta de școală, pusă în ordine dinainte.</h1>
           <p className="mt-4 max-w-md text-[15.5px] text-muted">Orar, note, teme și evaluări, toate într-un singur loc — calm, clar, al tău.</p>
@@ -668,9 +675,10 @@ function AuthCard({ sub, children }) {
       </aside>
       <main className="flex min-h-screen flex-col justify-center px-6 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
-          <div className="mb-7 flex items-center gap-3 lg:hidden">
+          {onHome && <button type="button" onClick={onHome} className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-[13px] font-700 text-muted hover:text-ink"><Icons.home size={15} /> Pagina principală</button>}
+          <Brand className="mb-7 flex items-center gap-3 lg:hidden">
             <Logo size={42} /><div><p className="font-display text-xl font-800 tracking-tight">SchoolPilot</p><p className="text-[13px] text-muted">{sub}</p></div>
-          </div>
+          </Brand>
           {children}
         </div>
       </main>
@@ -681,7 +689,7 @@ function AuthCard({ sub, children }) {
 function FormError({ children }) {
   return children ? <p role="alert" className="rounded-xl bg-heat-heavybg/70 p-3 text-[13px] text-heat-heavy">{children}</p> : null;
 }
-function Login({ onSignedIn, notice }) {
+function Login({ onSignedIn, notice, onHome }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -695,7 +703,7 @@ function Login({ onSignedIn, notice }) {
     try { await onSignedIn(); } catch (e2) { setBusy(false); setErr(errText(e2)); }
   };
   return (
-    <AuthCard sub="Intră în contul tău">
+    <AuthCard sub="Intră în contul tău" onHome={onHome}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <h1 className="font-display text-xl font-700">Autentificare</h1>
         <FormError>{err || notice}</FormError>
@@ -789,12 +797,16 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
                 <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[13px] font-700">{account.name}</span><span className="block truncate text-[11px] text-muted">{account.school || roleLabel}</span></span>
               </div>
             </button>
+            <button onClick={onLogout} className="mt-1.5 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-700 text-muted hover:bg-heat-heavybg/60 hover:text-heat-heavy"><Icons.logout size={16} /> Ieși din cont</button>
           </aside>
 
           <main className="min-w-0 flex-1">
             <header className="edge-b sticky top-0 z-30 flex items-center justify-between bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
               <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></button>
-              <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
+              <div className="flex items-center gap-1.5">
+                <button onClick={openProfile} aria-label="Profilul meu" className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1.5 text-[12.5px] font-700"><Icons.user size={14} /> {roleLabel}</button>
+                <button onClick={onLogout} aria-label="Ieși din cont" title="Ieși din cont" className="grid h-8 w-8 place-items-center rounded-full bg-paper text-muted hover:text-heat-heavy"><Icons.logout size={15} /></button>
+              </div>
             </header>
             <AnimatePresence mode="wait">
               <motion.div key={profile ? 'profile' : view} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? {} : { opacity: 0, y: -8 }} transition={{ duration: .22 }}>
@@ -1099,7 +1111,7 @@ function AdminStudents({ school, reload }) {
       {school.classes.length === 0 && <p className="mb-3 rounded-xl bg-heat-lightbg/60 p-3 text-[13px] text-heat-light">Adaugă întâi o clasă, ca să poți repartiza elevii.</p>}
       {school.students.length === 0 ? <Empty icon={<Icons.user size={26} />} title="Niciun elev" body="Adaugă elevi și repartizează-i la o clasă. Fiecare elev va avea propriul cont." />
         : <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card">
-            {school.students.map((s, i) => (
+            {[...school.students].sort(byFamily).map((s, i) => (
               <div key={s.id} className={cx('group flex items-center gap-3 p-4', i && 'border-t border-line')}>
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#E8650E]/10 font-700 text-[#E8650E] text-[13px]">{initials(s.name)}</span>
                 <div className="min-w-0 flex-1"><p className="truncate font-700">{s.name}</p><p className="truncate text-[12.5px] text-muted">{s.email || 'fără login'} · {s.className || 'fără clasă'}</p></div>
@@ -1355,7 +1367,7 @@ function TeacherCatalog({ t }) {
   const pickClass = (id) => { setCat(null); setClassId(id); setSubject(t.classes.find((c) => c.id === id).subjects[0]); };
   const pickSubject = (code) => { setCat(null); setSubject(code); };
   const current = cat && cat.classId === classId && cat.subject === subject ? cat : null;
-  const students = current ? [...current.students].sort((a, b) => a.name.localeCompare(b.name, 'ro')) : [];
+  const students = current ? [...current.students].sort(byFamily) : [];
   const open = students.find((s) => s.id === openId);
   const subjectName = (code) => (t.subjectCatalog.find((s) => s.code === code) || {}).name || code;
   return (
@@ -1407,7 +1419,7 @@ function CatalogTable({ students: all, onOpen, modules }) {
       if (x.avg === null || y.avg === null) return x.avg === null ? (y.avg === null ? 0 : 1) : -1; // no grades yet: always last
       if (x.avg !== y.avg) return sort.dir === 'asc' ? x.avg - y.avg : y.avg - x.avg;
     }
-    return (sort.col === 'name' && sort.dir === 'desc' ? -1 : 1) * x.name.localeCompare(y.name, 'ro');
+    return (sort.col === 'name' && sort.dir === 'desc' ? -1 : 1) * byFamily(x, y);
   });
   const toggle = (col) => setSort((c) => (c.col === col ? { col, dir: c.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
   const dirOf = (col) => (sort.col === col ? sort.dir : null);
@@ -1415,14 +1427,10 @@ function CatalogTable({ students: all, onOpen, modules }) {
   return (
     <div>
       <PickChips label="Perioada" options={[{ id: 0, label: 'Tot anul' }, ...modules.map((n) => ({ id: n, label: `M${n}` }))]} value={mod} onChange={setMod} />
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 focus-within:border-brand">
-          <Icons.search size={16} className="shrink-0 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrează după nume…" aria-label="Filtrează elevii după nume" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none" />
-        </label>
-        <SearchSelect label="Deschide un elev" value="" onChange={(id) => onOpen(Number(id))} placeholder="Deschide un elev…" searchPlaceholder="Caută elevul…" empty="Niciun elev găsit."
-          options={students.map((s) => ({ value: String(s.id), label: s.name, hint: s.avg === null ? '' : s.avg.toFixed(2) }))} />
-      </div>
+      <label className="mb-3 flex items-center gap-2 rounded-xl border border-line bg-white px-3 focus-within:border-brand">
+        <Icons.search size={16} className="shrink-0 text-muted" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Caută un elev după nume…" aria-label="Caută un elev după nume" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none" />
+      </label>
       {rows.length === 0 ? <p className="rounded-xl2 border border-line bg-white p-6 text-center text-[13px] text-muted">Niciun elev găsit.</p> : <>
         <div className="overflow-hidden rounded-xl2 border border-line bg-white shadow-card sm:hidden">
           <div className="flex items-center justify-between border-b border-line bg-paper/60 px-4 py-2.5"><SortHeader label="Nume" dir={dirOf('name')} onClick={() => toggle('name')} /><SortHeader label="Medie" dir={dirOf('avg')} onClick={() => toggle('avg')} right /></div>
@@ -1843,9 +1851,9 @@ function Messages({ student, onRead, upcoming = [] }) {
   const load = useCallback(() => API.get('/api/messages').then((d) => { setErr(null); setData(d); }).catch((e) => setErr(errText(e))), []);
   useEffect(() => { load(); }, [load]);
   const open = (k, name) => { setKey(k); setTitle(name); };
-  if (key) return <MessageThread threadKey={key} title={title} student={student} upcoming={upcoming} quiet={data.quietHours} onBack={() => { setKey(null); load(); onRead(); }} />;
+  if (key) return <MessageThread threadKey={key} title={title} student={student} upcoming={upcoming} quiet={data.quietHours} onOpened={onRead} onBack={() => { setKey(null); load(); onRead(); }} />;
   const known = data ? data.threads.map((t) => t.key) : [];
-  const others = data ? data.contacts.filter((c) => !known.includes(`user:${c.id}`)) : [];
+  const others = data ? data.contacts.filter((c) => !known.includes(`user:${c.id}`)).sort(byFamily) : [];
   const contactOptions = others.map((c) => ({ value: String(c.id), label: c.name, hint: c.detail }));
   return (
     <div>
@@ -1866,13 +1874,13 @@ function Messages({ student, onRead, upcoming = [] }) {
     </div>
   );
 }
-function MessageThread({ threadKey, title, student, upcoming, quiet, onBack }) {
+function MessageThread({ threadKey, title, student, upcoming, quiet, onOpened, onBack }) {
   const [rows, setRows] = useState(null);
   const [text, setText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => API.get(`/api/messages/thread?key=${encodeURIComponent(threadKey)}`).then((d) => setRows(d.messages)).catch(toastError), [threadKey]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load().then(() => onOpened && onOpened()); }, [load]); // the server marked them read: clear the badge now
   const send = () => {
     if (!text.trim()) return;
     setBusy(true);
@@ -2589,7 +2597,8 @@ function Landing({ onLogin }) {
     <div className="graph-paper min-h-screen">
       <header className="edge-b fixed inset-x-0 top-0 z-30 backdrop-blur" style={{ background: 'color-mix(in oklab, var(--color-paper) 82%, transparent)' }}>
         <div className="mx-auto flex max-w-6xl items-center px-6 py-3.5">
-          <div className="flex items-center gap-2.5"><Logo size={32} /><span className="font-display text-lg font-800 tracking-tight">SchoolPilot</span></div>
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })} aria-label="Înapoi sus" className="flex items-center gap-2.5"><Logo size={32} /><span className="font-display text-lg font-800 tracking-tight">SchoolPilot</span></button>
+          <button type="button" onClick={onLogin} className="ml-auto rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] font-700 hover:bg-paper">Intră în cont</button>
         </div>
       </header>
 
@@ -2645,7 +2654,7 @@ function Root() {
   if (phase === 'boot') return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
   if (phase === 'error') return <AuthCard sub="Autentificare"><FormError>Nu pot contacta serverul: {notice}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</FormError></AuthCard>;
   if (phase === 'landing') return <Landing onLogin={() => setPhase('login')} />;
-  if (phase === 'login' || !account) return <Login onSignedIn={loadMe} notice={notice} />;
+  if (phase === 'login' || !account) return <Login onSignedIn={loadMe} notice={notice} onHome={() => { setNotice(null); setPhase('landing'); window.scrollTo(0, 0); }} />;
   if (phase === 'change') return <ChangePassword account={account} onDone={loadMe} onLogout={logout} />;
   if (account.role === 'admin') return <AdminApp account={account} onLogout={logout} />;
   if (account.role === 'teacher') return <TeacherApp account={account} onLogout={logout} />;
