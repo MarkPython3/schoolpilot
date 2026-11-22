@@ -82,7 +82,9 @@
   ::selection { background: color-mix(in oklab, var(--color-accent) 24%, transparent); }
   input, textarea, [contenteditable] { caret-color: var(--color-accent); }
   /* daylight: faint window light drifting across the whole app, behind the content */
-  .daylight { isolation: isolate; }
+  /* position + overflow-x: clip keep the skewed, blurred light inside the app: without them it widened phone layouts.
+     clip (not hidden) so the sticky header and sidebar keep working */
+  .daylight { isolation: isolate; position: relative; overflow-x: clip; }
   .daylight::before {
     content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
     background:

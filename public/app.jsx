@@ -470,8 +470,40 @@ function TimetableGrid({ tt, onCell }) {
   // Each day is listed by start time; `period` only says which stored slot a cell uses.
   const days = tt.days.map((day) => day.map((cell, period) => cell && { ...cell, period }).filter(Boolean).sort((x, y) => x.time.localeCompare(y.time) || x.period - y.period));
   const rows = Math.min(tt.days[0].length, Math.max(7, ...days.map((d) => d.length + (onCell ? 1 : 0)))); // always room for a 7-lesson day
-  return (
-    <div className="overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card">
+  const [day, setDay] = useState(tt.todayIdx != null ? tt.todayIdx : 0);
+  const shown = days[day] || [];
+  const free = tt.days[day] ? tt.days[day].indexOf(null) : -1;
+  return (<>
+    {/* phones: one day at a time */}
+    <div className="rounded-xl2 border border-line bg-white p-3 shadow-card sm:hidden">
+      <div className="grid grid-cols-5 gap-1.5" role="tablist" aria-label="Ziua">
+        {DAYS_SHORT.map((d, i) => (
+          <button key={d} role="tab" aria-selected={i === day} onClick={() => setDay(i)}
+            className={cx('relative rounded-lg py-2 text-[13.5px] font-700', i === day ? 'bg-brand text-white' : 'text-ink hover:bg-paper')}>
+            {d}{i === tt.todayIdx && <span className={cx('absolute left-1/2 top-1 h-1 w-1 -translate-x-1/2 rounded-full', i === day ? 'bg-white' : 'bg-brand')} aria-label="azi" />}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 px-1 text-[12.5px] font-700 text-muted">{DAYS[day]}{day === tt.todayIdx ? ' · azi' : ''}</p>
+      <ul className="mt-2 space-y-2">
+        {shown.length === 0 && <li className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[13px] text-muted">Nicio oră în această zi.</li>}
+        {shown.map((cell) => (
+          <li key={cell.id}>
+            <button onClick={() => onCell && onCell(day, cell.period, cell)} className={cx('flex w-full items-center gap-3 rounded-lg border p-3 text-left', day === tt.todayIdx ? 'border-brand-100 bg-brand-50/40' : 'border-line bg-white')} style={{ borderLeft: `3px solid ${cell.hue}` }}>
+              <span className="w-12 shrink-0 font-mono leading-tight"><span className="block text-[13.5px] font-700">{cell.time}</span><span className="block text-[11px] text-muted">{cell.end}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-[14.5px] font-700">{cell.subjectName || cell.short}</span>{cell.teacher && <span className="block truncate text-[12.5px] text-muted">{cell.teacher}</span>}</span>
+              <span className="flex shrink-0 flex-col items-end gap-1">
+                <span className="rounded-md bg-paper px-2 py-0.5 text-[12px] font-600 text-ink/80">{cell.room || '—'}</span>
+                {cell.assessment && <span className="rounded-md px-1.5 py-0.5 text-[11px] font-700 text-white" style={{ background: cell.assessment === 'tema' ? '#C98A04' : '#D92626' }}>{cell.assessment === 'tema' ? 'temă' : 'evaluare'}</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+        {onCell && free >= 0 && <li><button onClick={() => onCell(day, free, null, shown.length ? shown[shown.length - 1].end : '08:00')} className="w-full rounded-lg border border-dashed border-line px-3 py-3 text-[13px] font-700 text-muted hover:border-brand hover:text-brand">+ Adaugă o oră</button></li>}
+      </ul>
+    </div>
+    {/* tablets and up: the whole week */}
+    <div className="hidden overflow-x-auto no-scrollbar rounded-xl2 border border-line bg-white p-3 shadow-card sm:block">
       <div className="grid min-w-[700px] gap-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         {DAYS.map((d, i) => <div key={d} className={cx('rounded-lg px-2 py-2 text-center text-sm font-700', i === tt.todayIdx ? 'bg-brand text-white' : 'text-ink')}>{d}</div>)}
         {Array.from({ length: rows }, (_, r) => r).map((r) => days.map((day, di) => {
@@ -495,7 +527,7 @@ function TimetableGrid({ tt, onCell }) {
         }))}
       </div>
     </div>
-  );
+  </>);
 }
 
 /* =====================================================================
@@ -701,9 +733,9 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
           <nav className="edge-t fixed inset-x-0 bottom-0 z-30 bg-white/90 backdrop-blur lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="mx-auto flex max-w-md items-stretch justify-around px-1 py-1.5">
               {nav.map((n) => { const on = !profile && view === n.id; return (
-                <button key={n.id} onClick={() => go(n.id)} className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
+                <button key={n.id} onClick={() => go(n.id)} className="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5">
                   {on && <motion.span layoutId="tab-active" transition={spring} className="absolute inset-x-2 top-0 h-1 rounded-full bg-brand" />}
-                  <span className="relative"><n.icon size={21} className={on ? 'text-brand' : 'text-muted'} />{n.badge > 0 && <span className="absolute -right-2.5 -top-1.5"><Badge n={n.badge} /></span>}</span><span className={cx('font-700', nav.length > 5 ? 'text-[9.5px]' : 'text-[10.5px]', on ? 'text-brand' : 'text-muted')}>{n.label}</span>
+                  <span className="relative"><n.icon size={21} className={on ? 'text-brand' : 'text-muted'} />{n.badge > 0 && <span className="absolute -right-2.5 -top-1.5"><Badge n={n.badge} /></span>}</span><span className={cx('max-w-full truncate font-700', nav.length > 5 ? 'text-[10px] tracking-[-0.01em]' : 'text-[10.5px]', on ? 'text-brand' : 'text-muted')}>{n.label}</span>
                 </button>
               ); })}
             </div>

@@ -169,9 +169,9 @@ def seed(con):
     ]:
         con.execute("INSERT INTO announcements(school_id,class_id,author_id,title,body,priority,created_at) VALUES(?,?,?,?,?,?,?)",
                     (sid, class_id, author, title, body, prio, at))
-    for title, days, kind, note in [("Olimpiada de matematică — etapa pe școală", 12, "olimpiada", "Înscrieri la doamna Popescu."),
-                                    ("Club de robotică", 2, "club", "Miercuri, după ore, în Lab Info."),
-                                    ("Termen: înscrieri la concursul de eseuri", 5, "termen", None)]:
+    for title, days, kind, note in [("Matematică, etapa pe școală", 12, "olimpiada", "Înscrieri la doamna Popescu."),
+                                    ("Robotică", 2, "club", "Miercuri, după ore, în Lab Info."),
+                                    ("Înscrieri la concursul de eseuri", 5, "termen", None)]:
         con.execute("INSERT INTO school_events(school_id,title,date,kind,note,author_id,created_at) VALUES(?,?,?,?,?,?,?)",
                     (sid, title, iso(t + timedelta(days=days)), kind, note, admin, now))
     con.execute("INSERT INTO messages(sender_id,recipient_id,body,anonymous,created_at,visible_at) VALUES(?,?,?,0,?,?)",
