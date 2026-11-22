@@ -397,10 +397,25 @@ function useCountUp(value, dur = 700) {
   }, [value]);
   return v;
 }
+// The SchoolPilot compass (public/media/logo.svg), framed square and zoomed onto the compass (centre 111, 98.5),
+// so it still reads at sidebar and tab sizes.
 function Logo({ size = 36 }) {
   return (
-    <span className="grid shrink-0 place-items-center text-[var(--color-accent-ink)]" style={{ width: size, height: size, borderRadius: 10, background: 'linear-gradient(var(--color-accent), var(--color-accent-deep))', boxShadow: 'inset 0 1px 0 var(--glint), 0 0 0 1px var(--color-accent-deep), 0 3px 0 var(--color-accent-deep)' }}>
-      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8l9-5 9 5-9 5z" /><path d="M7 10v5c0 1.5 2.5 3 5 3s5-1.5 5-3v-5" /></svg>
+    <span className="grid shrink-0 overflow-hidden" aria-hidden="true" style={{ width: size, height: size, borderRadius: Math.round(size * 0.26), boxShadow: '0 1px 2px rgba(12,90,58,.3), 0 3px 8px -4px rgba(12,90,58,.45)' }}>
+      <svg viewBox="41 28.5 140 140" width={size} height={size}>
+        <rect x="0" y="0" width="213" height="197" fill="#0c5a3a" />
+        <g fill="none" stroke="#f6f3ea" strokeWidth="6.5" strokeLinecap="round">
+          <path d="M66.8 77 A50.2 50.2 0 0 1 102.4 51.2" />
+          <path d="M119.8 51.2 A50.2 50.2 0 0 1 155.3 77" stroke="#e3d492" />
+          <path d="M160.7 93.7 A50.2 50.2 0 0 1 147.15 135.45" />
+          <path d="M133 145.65 A50.2 50.2 0 0 1 89 145.65" />
+          <path d="M74.9 135.45 A50.2 50.2 0 0 1 61.3 93.7" />
+        </g>
+        <path d="M130.6 73.2 118.4 104.9 103.3 96.5Z" fill="#e3d492" />
+        <path d="M91.4 127.7 103.3 96.5 118.4 104.9Z" fill="#f6f3ea" />
+        <circle cx="111" cy="100.5" r="4.2" fill="#0c5a3a" />
+        <circle cx="111" cy="100.5" r="1.45" fill="#f6f3ea" />
+      </svg>
     </span>
   );
 }
@@ -1992,9 +2007,8 @@ function StudentToday({ s, reload, onGoto }) {
               </>}
         </motion.section>
 
-        <motion.div {...stagger(2)} className="flex flex-col">
-          <section className="border-t-[1.5px] border-ink/20 pt-6 first:border-t-0 first:pt-0">
-            <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">De predat curând</h2>
+        <motion.div {...stagger(2)} className="flex flex-col gap-4">
+          <AziCard icon={Icons.book} title="De predat curând">
             <ul className="-mx-2 space-y-0.5">
               <AnimatePresence initial={false}>
                 {t.due.length === 0 && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-2 py-1 text-[13px] text-muted">Nimic urgent — zi liniștită.</motion.li>}
@@ -2011,58 +2025,66 @@ function StudentToday({ s, reload, onGoto }) {
                 ))}
               </AnimatePresence>
             </ul>
-          </section>
+          </AziCard>
           {t.changes.length > 0 && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">Schimbări în orar</h2>
-              <ul className="space-y-2">{t.changes.map((c) => <li key={c.id} className="min-w-0"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
-            </section>
+            <AziCard icon={Icons.clock} title="Schimbări în orar">
+              <ul className="space-y-2.5">{t.changes.map((c) => <li key={c.id} className="min-w-0 rounded-lg bg-heat-busybg/50 px-3 py-2"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
+            </AziCard>
           )}
           {t.excuseDue.length > 0 && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <h2 className="text-[13.5px] font-700 text-muted">Adu scutirea</h2>
-              <p className="mb-2 mt-1 text-[12.5px] text-muted">Absențe nemotivate recente. Verifică termenul cu dirigintele.</p>
+            <AziCard icon={Icons.alert} title="Adu scutirea" sub="Absențe nemotivate recente. Verifică termenul cu dirigintele.">
               <ul className="space-y-1.5">{t.excuseDue.map((a) => <li key={a.id} className="text-sm"><b className="font-700">{a.subjectName}</b>, {fmtDate(a.date)}: până pe {fmtDate(a.until)}</li>)}</ul>
-            </section>
+            </AziCard>
           )}
           {t.nextDay && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <h2 className="text-[13.5px] font-700 text-muted">{t.nextDay.label}</h2>
-              <p className="mt-1 text-[13px] text-muted">{t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la {t.nextDay.first}</p>
-              <ul className="mt-3 space-y-1.5">{t.nextDay.pack.map((p) => <li key={p} className="flex items-center gap-2 text-sm"><Icons.bag size={15} className="shrink-0 text-muted" />{p}</li>)}</ul>
-            </section>
+            <AziCard icon={Icons.calendar} title={t.nextDay.label} sub={`${t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la ${t.nextDay.first}`}>
+              <ul className="space-y-1.5">{t.nextDay.pack.map((p) => <li key={p} className="flex items-center gap-2 text-sm"><Icons.bag size={15} className="shrink-0 text-muted" />{p}</li>)}</ul>
+            </AziCard>
           )}
           {t.announcements.length > 0 && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <button onClick={() => onGoto('announcements')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Anunțuri</h2><Icons.chevR size={16} className="text-muted" /></button>
-              <ul className="space-y-2">{t.announcements.map((a) => (
+            <AziCard icon={Icons.megaphone} title="Anunțuri" onMore={() => onGoto('announcements')}>
+              <ul className="space-y-2.5">{t.announcements.map((a) => (
                 <li key={a.id} className="min-w-0">
                   <p className="flex items-center gap-1.5 text-sm font-700"><span className="min-w-0 truncate">{a.title}</span>{a.priority === 'urgent' && <span className="shrink-0 rounded-md bg-heat-heavy px-1.5 py-0.5 text-[11px] font-700 leading-none text-white">Urgent</span>}</p>
                   <p className="truncate text-[12.5px] text-muted">{a.author && `${a.author} · `}{announcementTarget(a)}</p>
                 </li>
               ))}</ul>
-            </section>
+            </AziCard>
           )}
           {t.newGrades.length > 0 && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <button onClick={() => onGoto('marks')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Note noi</h2><Icons.chevR size={16} className="text-muted" /></button>
+            <AziCard icon={Icons.chart} title="Note noi" onMore={() => onGoto('marks')}>
               <ul className="space-y-1.5">{t.newGrades.map((g) => (
                 <li key={g.id} className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-700 tnum" style={gradeStyle(g.v)}>{g.v}</span>
                   <span className="min-w-0 flex-1 truncate text-[13px]"><b className="font-700">{g.short}</b> · {fmtDate(g.d)}{g.note && ` · ${g.note}`}</span>
                 </li>
               ))}</ul>
-            </section>
+            </AziCard>
           )}
           {t.pack.length > 0 && (
-            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
-              <h2 className="mb-2.5 flex items-center gap-2 text-[13.5px] font-700 text-muted"><Icons.bag size={16} className="text-brand" /> De pus în ghiozdan</h2>
+            <AziCard icon={Icons.bag} title="De pus în ghiozdan">
               <ul className="flex flex-wrap gap-2">{t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 + i * 0.04 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}</ul>
-            </section>
+            </AziCard>
           )}
         </motion.div>
       </div>
     </div>
+  );
+}
+// Azi side column: each block is its own card with a clear title, so they read apart on a phone
+function AziCard({ icon: I, title, sub, onMore, children }) {
+  const head = (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600"><I size={16} /></span>
+      <h2 className="truncate font-display text-[16px] font-700 text-ink">{title}</h2>
+    </span>
+  );
+  return (
+    <section className="rounded-xl2 border border-line bg-white p-4 shadow-card">
+      {onMore ? <button onClick={onMore} className="flex w-full items-center justify-between gap-2 text-left">{head}<Icons.chevR size={17} className="shrink-0 text-muted" /></button> : head}
+      {sub && <p className="mt-1.5 text-[12.5px] text-muted">{sub}</p>}
+      <div className="mt-3">{children}</div>
+    </section>
   );
 }
 const STUDY_STEPS = ['Recitește notițele', 'Rezolvă exerciții', 'Fă un test de probă'];
@@ -2347,7 +2369,7 @@ function DeviceShowcase() {
         <div ref={ref} className="relative mt-12 pb-[10%] sm:mt-16 sm:pb-[6%]">
           <motion.div style={{ y: lapY }} className="w-[90%] sm:w-[84%]">
             <div className="rounded-t-[1.3rem] rounded-b-md p-[1.3%] shadow-lift" style={{ background: frame }}>
-              <img src="/media/app/laptop-catalog.webp" width="1920" height="1200" loading="lazy" decoding="async" alt="Catalogul profesorului: elevii clasei 10B, cu notele, absențele și mediile la matematică." className="block h-auto w-full rounded-[0.45rem]" />
+              <img src={appShot('laptop-catalog')} width="1920" height="1200" loading="lazy" decoding="async" alt="Catalogul profesorului: elevii clasei 10B, cu notele, absențele și mediile la matematică." className="block h-auto w-full rounded-[0.45rem]" />
             </div>
             <div className="relative -mx-[5%] h-3 rounded-b-[1.1rem] shadow-card sm:h-[18px]" style={{ background: 'linear-gradient(#e9ece7, #bcc5be)' }}>
               <span className="absolute left-1/2 top-0 h-[45%] w-[13%] -translate-x-1/2 rounded-b-lg" style={{ background: 'rgba(23,35,29,.12)' }} />
@@ -2355,7 +2377,7 @@ function DeviceShowcase() {
           </motion.div>
           <motion.div style={{ y: phoneY }} className="absolute bottom-0 right-0 w-[36%] sm:w-[24%]">
             <div className="p-[3.4%] shadow-lift" style={{ background: frame, borderRadius: '15% / 7%' }}>
-              <img src="/media/app/phone-azi.webp" width="780" height="1688" loading="lazy" decoding="async" alt="Pagina Azi a unui elev, pe telefon: orele de luni, cu matematica în desfășurare și avertismentul pentru joi." className="block h-auto w-full" style={{ borderRadius: '12% / 5.6%' }} />
+              <img src={appShot('phone-azi')} width="780" height="1688" loading="lazy" decoding="async" alt="Pagina Azi a unui elev, pe telefon: orele de luni, cu matematica în desfășurare și avertismentul pentru joi." className="block h-auto w-full" style={{ borderRadius: '12% / 5.6%' }} />
             </div>
           </motion.div>
         </div>
@@ -2497,6 +2519,9 @@ function BriefScene({ p }) {
 }
 // Hero film: a Higgsfield clip (week organiser filling up), extracted to a WebP sequence so
 // scrolling scrubs it frame-exact on a canvas (Apple's product-page technique; a seeking <video> stutters).
+// App screenshots (public/media/app) are cached for a day by browsers and Cloudflare: bump SHOTS_V whenever they are recaptured.
+const SHOTS_V = '2026-11-22-compass';
+const appShot = (name) => `/media/app/${name}.webp?v=${SHOTS_V}`;
 const FILM = { n: 72, w: 1280, h: 721, src: (i) => `/media/hero/f${String(i).padStart(3, '0')}.webp` };
 const FILM_BEATS = [
   'Orarul tău se așază singur, zi cu zi.',
@@ -2597,10 +2622,10 @@ function Landing({ onLogin }) {
       {/* HERO — Higgsfield film, scrubbed by scroll (see ScrollFilm) */}
       <ScrollFilm />
 
-      <ScrollScene Visual={OrarScene} shot="/media/app/scene-orar.webp" title="Tot orarul, într-o privire." body="Zilele tale, colorate pe materii. Vezi dintr-o privire ce urmează, la ce oră și în ce sală." />
-      <ScrollScene Visual={NoteScene} shot="/media/app/scene-note.webp" flip title="Notele și media, mereu la zi." body="Catalogul tău, clar. Plus calculatorul: îți spune de câte note ai nevoie ca să ajungi la media dorită." />
-      <ScrollScene Visual={StormScene} shot="/media/app/scene-storm.webp" title="Vezi furtuna înainte să lovească." body="Trei teste în aceeași zi? Primești avertismentul din timp — și de unde să începi recapitularea." />
-      <ScrollScene Visual={BriefScene} shot="/media/app/scene-azi.webp" flip title="Dimineața, ziua pusă în ordine." body="În fiecare dimineață: orele de azi, ce ai de predat și ce să pui în ghiozdan. Fără surprize." />
+      <ScrollScene Visual={OrarScene} shot={appShot('scene-orar')} title="Tot orarul, într-o privire." body="Zilele tale, colorate pe materii. Vezi dintr-o privire ce urmează, la ce oră și în ce sală." />
+      <ScrollScene Visual={NoteScene} shot={appShot('scene-note')} flip title="Notele și media, mereu la zi." body="Catalogul tău, clar. Plus calculatorul: îți spune de câte note ai nevoie ca să ajungi la media dorită." />
+      <ScrollScene Visual={StormScene} shot={appShot('scene-storm')} title="Vezi furtuna înainte să lovească." body="Trei teste în aceeași zi? Primești avertismentul din timp — și de unde să începi recapitularea." />
+      <ScrollScene Visual={BriefScene} shot={appShot('scene-azi')} flip title="Dimineața, ziua pusă în ordine." body="În fiecare dimineață: orele de azi, ce ai de predat și ce să pui în ghiozdan. Fără surprize." />
 
       <DeviceShowcase />
 
@@ -2619,10 +2644,10 @@ function Landing({ onLogin }) {
 const LOOP = { hero: 9.5, scene: 6.5, devices: 5, end: 6 };
 const LOOP_CLIP = { src: '/media/hero-film.mp4', at: 0.3 }; // the original Higgsfield clip: 24 fps, 1364×768, 5.9 s
 const LOOP_SCENES = [
-  { Visual: OrarScene, shot: '/media/app/scene-orar.webp', title: 'Tot orarul, într-o privire.', body: 'Zilele tale, colorate pe materii: ce urmează, la ce oră și în ce sală.' },
-  { Visual: NoteScene, shot: '/media/app/scene-note.webp', flip: true, title: 'Notele și media, mereu la zi.', body: 'Plus calculatorul: câte note îți mai trebuie ca să ajungi la media dorită.' },
-  { Visual: StormScene, shot: '/media/app/scene-storm.webp', title: 'Vezi furtuna înainte să lovească.', body: 'Trei teste în aceeași zi? Afli din timp, și de unde să începi recapitularea.' },
-  { Visual: BriefScene, shot: '/media/app/scene-azi.webp', flip: true, title: 'Dimineața, ziua pusă în ordine.', body: 'Orele de azi, ce ai de predat și ce pui în ghiozdan.' },
+  { Visual: OrarScene, shot: appShot('scene-orar'), title: 'Tot orarul, într-o privire.', body: 'Zilele tale, colorate pe materii: ce urmează, la ce oră și în ce sală.' },
+  { Visual: NoteScene, shot: appShot('scene-note'), flip: true, title: 'Notele și media, mereu la zi.', body: 'Plus calculatorul: câte note îți mai trebuie ca să ajungi la media dorită.' },
+  { Visual: StormScene, shot: appShot('scene-storm'), title: 'Vezi furtuna înainte să lovească.', body: 'Trei teste în aceeași zi? Afli din timp, și de unde să începi recapitularea.' },
+  { Visual: BriefScene, shot: appShot('scene-azi'), flip: true, title: 'Dimineața, ziua pusă în ordine.', body: 'Orele de azi, ce ai de predat și ce pui în ghiozdan.' },
 ];
 const LOOP_DEVICES = LOOP.hero + LOOP_SCENES.length * LOOP.scene;
 const LOOP_END = LOOP_DEVICES + LOOP.devices;
@@ -2722,11 +2747,11 @@ function FilmLoop() {
           <h2 className="font-display font-700 leading-[1.05]" style={{ fontSize: 'clamp(2rem, 5vh, 4.6rem)' }}>Și exact așa arată aplicația.</h2>
           <div className="relative mt-[4vh] w-full max-w-[min(88vw,150vh)]">
             <motion.div style={{ y: lapY }} className="w-[80%]">
-              <div className="rounded-t-[1.3rem] rounded-b-md p-[1.2%] shadow-lift" style={{ background: frame }}><img src="/media/app/laptop-catalog.webp" alt="" className="block h-auto w-full rounded-[0.45rem]" /></div>
+              <div className="rounded-t-[1.3rem] rounded-b-md p-[1.2%] shadow-lift" style={{ background: frame }}><img src={appShot('laptop-catalog')} alt="" className="block h-auto w-full rounded-[0.45rem]" /></div>
               <div className="relative -mx-[5%] h-[2vh] rounded-b-[1.1rem] shadow-card" style={{ background: 'linear-gradient(#e9ece7, #bcc5be)' }} />
             </motion.div>
             <motion.div style={{ y: phoneY }} className="absolute bottom-[-4vh] right-[2%] w-[22%]">
-              <div className="p-[3.4%] shadow-lift" style={{ background: frame, borderRadius: '15% / 7%' }}><img src="/media/app/phone-azi.webp" alt="" className="block h-auto w-full" style={{ borderRadius: '12% / 5.6%' }} /></div>
+              <div className="p-[3.4%] shadow-lift" style={{ background: frame, borderRadius: '15% / 7%' }}><img src={appShot('phone-azi')} alt="" className="block h-auto w-full" style={{ borderRadius: '12% / 5.6%' }} /></div>
             </motion.div>
           </div>
         </motion.div>
