@@ -1,0 +1,7 @@
+{
+  "name": "schoolpilot",
+  "private": true,
+  "description": "Build only: node build.mjs precompiles public/app.jsx and the Tailwind CSS into public/build/. The server itself needs no Node.",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "tailwindcss": "3.4.17" }
+}

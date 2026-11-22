@@ -11,6 +11,8 @@ Run:  python3 server.py            # http://localhost:8000
 Env:  PORT=8000  DB=schoolpilot.db
 """
 import base64
+import gzip
+import hashlib
 import json
 import os
 import re
@@ -117,6 +119,56 @@ def parse_iso(s):
 
 def day_label(d):
     return "%s %d" % (DAYNAMES[d.weekday()], d.day)
+
+# --------------------------------------------------------------------------- #
+#  The page: precompiled when public/build matches the source, else compiled in the browser
+# --------------------------------------------------------------------------- #
+CTYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".jsx": "text/javascript",
+          ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json",
+          ".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".mp4": "video/mp4"}
+COMPRESSIBLE = {"text/html", "text/javascript", "text/css", "image/svg+xml", "application/json"}
+APP_SOURCES = ("app.jsx", "tailwind.config.js")  # build.mjs hashes the same files, in this order
+VENDOR = ["react.production.min.js", "react-dom.production.min.js", "framer-motion.js", "supabase.js"]
+_gz = {}
+
+def gzipped(data):
+    key = hashlib.sha1(data).digest()
+    if key not in _gz:
+        if len(_gz) > 64:
+            _gz.clear()
+        _gz[key] = gzip.compress(data, 6)
+    return _gz[key]
+
+def source_hash():
+    h = hashlib.sha256()
+    for name in APP_SOURCES:
+        with open(os.path.join(PUBLIC, name), "rb") as f:
+            h.update(f.read())
+    return h.hexdigest()[:16]
+
+def built_hash():
+    try:
+        with open(os.path.join(PUBLIC, "build", "stamp.json")) as f:
+            return json.load(f).get("source")
+    except (OSError, ValueError):
+        return None
+
+def page_html():
+    with open(os.path.join(PUBLIC, "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    src = source_hash()
+    if os.environ.get("DEV") != "1" and built_hash() == src:
+        head = ['<link rel="preload" as="image" href="/media/hero/f000.webp" fetchpriority="high" />']
+        head += ['<script defer src="/vendor/%s"></script>' % v for v in VENDOR]
+        head += ['<script defer src="/build/app.js?v=%s"></script>' % src]
+        body = []
+        # after the inline <style>, where Tailwind Play used to inject its CSS, so the cascade is unchanged
+        html = html.replace("</head>", '<link rel="stylesheet" href="/build/app.css?v=%s" />\n</head>' % src, 1)
+    else:  # source changed since the last `node build.mjs`: compile in the browser, as before
+        head = ['<script src="/vendor/tailwindcss.js"></script>', '<script src="/tailwind.config.js?v=%s"></script>' % src]
+        head += ['<script src="/vendor/%s"></script>' % v for v in VENDOR + ["babel.min.js"]]
+        body = ['<script type="text/babel" data-presets="react" src="/app.jsx?v=%s"></script>' % src]
+    return html.replace("<!--APP-HEAD-->", "\n".join(head)).replace("<!--APP-BODY-->", "\n".join(body)).encode("utf-8")
 
 # --------------------------------------------------------------------------- #
 #  Database
@@ -586,7 +638,10 @@ def change_label(r, con):
     if r["kind"] == "cancelled":
         return "Oră anulată"
     if r["kind"] == "room":
-        return "Mutată în sala %s" % r["room"]
+        room = r["room"] or ""
+        if re.match(r"(?i)(sala|sală|lab|laborator|atelier|cabinet|amfiteatru)\b", room):  # "Sala 21", "Lab F"
+            return "Mutată în %s" % room
+        return "Mutată în sala %s" % room  # "A24"
     return "Suplinire: %s" % teacher_name(con, r["teacher_id"])
 
 def change_row(con, r):
@@ -1309,21 +1364,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def _static(self):
         path = unquote(urlparse(self.path).path)
-        if path in ("", "/"):
-            path = "/index.html"
+        if path in ("", "/", "/index.html"):
+            return self._send(page_html(), "text/html; charset=utf-8", "no-cache")
         target = os.path.normpath(os.path.join(PUBLIC, path.lstrip("/")))
-        if not target.startswith(PUBLIC) or not os.path.isfile(target):
-            target = os.path.join(PUBLIC, "index.html")
-        ctypes = {".html": "text/html; charset=utf-8", ".js": "text/javascript",
-                  ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json",
-                  ".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".mp4": "video/mp4"}
+        if not target.startswith(PUBLIC + os.sep) or not os.path.isfile(target):
+            if os.path.splitext(path)[1]:  # a missing file (e.g. /favicon.ico), not a page
+                return self._send(b"not found", "text/plain", "no-cache", 404)
+            return self._send(page_html(), "text/html; charset=utf-8", "no-cache")
         ext = os.path.splitext(target)[1]
+        rel = os.path.relpath(target, PUBLIC).split(os.sep)[0]
+        cache = {"build": "public, max-age=31536000, immutable",  # always requested with ?v=<hash>
+                 "media": "public, max-age=86400", "vendor": "public, max-age=86400"}.get(rel, "no-cache")
         with open(target, "rb") as f:
-            data = f.read()
-        self.send_response(200)
-        self.send_header("Content-Type", ctypes.get(ext, "application/octet-stream"))
-        if target.startswith(os.path.join(PUBLIC, "media") + os.sep):
-            self.send_header("Cache-Control", "public, max-age=86400")
+            self._send(f.read(), CTYPES.get(ext, "application/octet-stream"), cache)
+
+    def _send(self, data, ctype, cache, code=200):
+        if ctype.split(";")[0] in COMPRESSIBLE and "gzip" in self.headers.get("Accept-Encoding", ""):
+            data = gzipped(data)
+            self.send_response(code)
+            self.send_header("Content-Encoding", "gzip")
+        else:
+            self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", cache)
+        self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

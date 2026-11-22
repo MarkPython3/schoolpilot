@@ -10,12 +10,20 @@ PORT=5000 DB=other.db python3 server.py
 python3 seed.py              # WIPES data, then builds the demo school (class 10B); dates are relative to today
 ```
 
-Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called with `urllib`), no build step, no test suite. Verify changes by running the server and using the app in a browser. `POST /api/reset` wipes everything except the admin account; deleting `schoolpilot.db` also resets.
+Needs a `.env` (copy `.env.example`). No Python dependencies (Supabase is called with `urllib`), no test suite.
+
+```bash
+node build.mjs               # after changing public/app.jsx or public/tailwind.config.js (first time: npm install)
+DEV=1 python3 server.py      # force in-browser compilation even when public/build is current
+```
+
+The build is optional while developing: `page_html()` in `server.py` serves the precompiled `public/build/` (app.js + app.css) only while `build/stamp.json` matches the hash of `app.jsx` + `tailwind.config.js`; otherwise the page falls back to Babel + Tailwind Play in the browser, so edit-and-refresh still works. Run the build and commit `public/build/` before deploying, or visitors get the slow path. Verify changes by running the server and using the app in a browser. `POST /api/reset` wipes everything except the admin account; deleting `schoolpilot.db` also resets.
 
 ## Architecture
 
 - `server.py` — single-file stdlib `http.server` + SQLite backend. Schema is the `SCHEMA` string (created on startup by `init_db()`; only the admin user is seeded). GET routes live in `Handler.get_api`, all mutations in `Handler.route`. The server computes view-ready "snapshots" (`build_admin`, `build_teacher`, `build_student`, `class_workload`), so most logic (heatmap, collisions, averages, absences, what-if calculator) is in Python, not the client.
-- `public/index.html` — entire React SPA in one `<script type="text/babel">` block, transpiled in the browser by Babel standalone. React, ReactDOM, Framer Motion (`window.Motion`), Babel and the Tailwind play script are vendored in `public/vendor/` so the app works offline (only the Google Fonts link is remote; it falls back to system fonts). Tailwind theme tokens (brand teal, heat colours) are in the inline `tailwind.config`.
+- `public/app.jsx` — the entire React SPA. `public/index.html` is only the shell (global CSS); `server.py` fills its `<!--APP-HEAD-->` / `<!--APP-BODY-->` markers with either the precompiled build or the in-browser Babel path. React, ReactDOM, Framer Motion (`window.Motion`), Babel and the Tailwind play script are vendored in `public/vendor/` so the app works offline (only the Google Fonts link is remote; it falls back to system fonts). Tailwind theme tokens (brand teal, heat colours) are in `public/tailwind.config.js`, shared by the browser and `build.mjs`. Static text files are served gzipped.
+- `public/media/` — the welcome page film (`hero/`, frames load after the page) and real app screenshots (`app/`), captured from the `seed.py` demo school (fictional names only; never screenshot real accounts).
 - Auth is Supabase Auth (email + password); app data stays in SQLite. `.env` (git-ignored; see `.env.example`) holds `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ADMIN_EMAIL` and is read by `load_env()` at startup. The secret key is server-only: never send it to the client, log it, or commit `.env`. The client gets the URL + publishable key from the public `/api/config` endpoint.
 - Every other `/api/*` call needs `Authorization: Bearer <access_token>`. `Handler._me` validates the token with `GET /auth/v1/user` (cached `TOKEN_TTL`), maps the email to a local `users` row and derives identity only from that; ids in the request (`userId`, `studentId`, …) are ignored. `need()` / `need_class()` enforce roles: admin = `role='admin'` with `ADMIN_EMAIL`; teachers see only classes they teach in the timetable; students only their own data. Accounts with `user_metadata.must_change_password` get 403 everywhere except `/api/me`.
 - Only the admin creates accounts (public sign-up is off in Supabase): `add_account` / `reset_auth_password` / `remove_users` call the Auth Admin API (`/auth/v1/admin/users`, `apikey: <secret>`) and return a one-time temporary password.

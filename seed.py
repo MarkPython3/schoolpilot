@@ -3,7 +3,7 @@
 Fill the SchoolPilot database with a demo school.
 
 WIPES the existing data first (everything except the admin account), then adds:
-class 10B with 25 students, 8 teachers, a full Mon-Fri timetable, an upcoming
+class 10B with 25 students, 9 teachers, a full Mon-Fri timetable (7 lessons Mon-Thu), an upcoming
 Thursday with three tests (a collision), grades, absences and a few tasks.
 One student (Matei Constantin) has a physics average close to failing.
 Seeded people have no email, so they can't log in; they only populate the views.
@@ -38,14 +38,15 @@ TEACHERS = [  # (name, subjects)
     ("Radu Georgescu", ["ist", "geo"]),
     ("Gabriela Tudor", ["info"]),
     ("Victor Munteanu", ["sport", "art"]),
+    ("Daniela Iordache", ["rel", "muz"]),
 ]
 
 TIMETABLE = [  # one row per weekday, periods from 08:00
-    ["rom", "mate", "fiz", "eng", "ist", "sport"],    # Luni
-    ["mate", "rom", "chim", "bio", "geo", "info"],    # Marți
-    ["rom", "mate", "fra", "info", "art", "eng"],     # Miercuri
-    ["mate", "fiz", "chim", "rom", "bio", "sport"],   # Joi
-    ["fiz", "ist", "fra", "geo", "eng", "bio"],       # Vineri
+    ["rom", "mate", "fiz", "eng", "ist", "sport", "rel"],    # Luni
+    ["mate", "rom", "chim", "bio", "geo", "info", "eng"],    # Marți
+    ["rom", "mate", "fra", "info", "art", "eng", "muz"],     # Miercuri
+    ["mate", "fiz", "chim", "rom", "bio", "sport", "ist"],   # Joi
+    ["fiz", "ist", "fra", "geo", "eng", "bio"],              # Vineri
 ]
 ROOMS = {"fiz": "Lab F", "chim": "Lab C", "bio": "Lab B", "info": "Lab Info",
          "sport": "Sala de sport", "art": "Atelier"}
@@ -98,10 +99,16 @@ def seed(con):
         (thu, "mate", "test", "Lucrare — funcții"),
         (thu, "fiz", "test", "Lucrare — optică"),
         (thu, "chim", "test", "Lucrare — soluții"),
+        (mon, "info", "tema", "Proiect — pagină web"),
         (mon + timedelta(days=1), "rom", "quiz", "Ascultare — Ion"),
         (mon + timedelta(days=2), "eng", "tema", "Eseu — My town"),
+        (mon + timedelta(days=2), "bio", "tema", "Fișă — sistemul nervos"),
         (mon + timedelta(days=4), "ist", "tema", "Fișă — Unirea"),
+        (mon + timedelta(days=4), "fra", "tema", "Fișă — passé composé"),
+        (mon + timedelta(days=7), "geo", "tema", "Hartă — relieful României"),
         (mon + timedelta(days=8), "bio", "quiz", "Ascultare — celula"),
+        (mon + timedelta(days=9), "mate", "quiz", "Test scurt — ecuații"),
+        (mon + timedelta(days=10), "info", "test", "Lucrare — tablouri"),
         (mon + timedelta(days=11), "geo", "test", "Lucrare — relief"),
     ]
     for d, subj, typ, title in assessments:
@@ -135,13 +142,40 @@ def seed(con):
                 con.execute("INSERT INTO absences(student_id,subject,kind,date,teacher_id) VALUES(?,?,?,?,?)",
                             (uid, subj, kind, iso(d), teacher_of[subj]))
 
-    # --- a few personal tasks for the at-risk student ---
-    uid = students[AT_RISK]
-    for title, subj, due in [("Exerciții optică pag. 54", "fiz", thu - timedelta(days=1)),
-                             ("Recapitulare funcții", "mate", thu - timedelta(days=1)),
-                             ("Citește capitolul 3 din Ion", "rom", t)]:
-        con.execute("INSERT INTO tasks(student_id,title,subject,type,due,done,created_at) VALUES(?,?,?,?,?,0,?)",
-                    (uid, title, subj, "tema", iso(max(due, t)), now))
+    # --- personal tasks: the at-risk student, and Ana Popa (the student shown on the welcome page) ---
+    for who, items in [(AT_RISK, [("Exerciții optică pag. 54", "fiz", thu - timedelta(days=1)),
+                                  ("Recapitulare funcții", "mate", thu - timedelta(days=1)),
+                                  ("Citește capitolul 3 din Ion", "rom", t)]),
+                       ("Ana Popa", [("Recapitulare funcții — fișa 2", "mate", thu - timedelta(days=1)),
+                                     ("Probleme optică pag. 61", "fiz", thu - timedelta(days=1)),
+                                     ("Vocabular unitatea 4", "eng", t + timedelta(days=1))])]:
+        for title, subj, due in items:
+            con.execute("INSERT INTO tasks(student_id,title,subject,type,due,done,created_at) VALUES(?,?,?,?,?,0,?)",
+                        (students[who], title, subj, "tema", iso(max(due, t)), now))
+
+    # --- this week's life of the class: a room change, announcements, events, a message ---
+    if t.weekday() <= 4:  # today's history lesson moves room (shows on Azi)
+        slot = con.execute("SELECT id FROM timetable WHERE class_id=? AND day=? AND subject IN ('ist','geo','eng') ORDER BY period LIMIT 1",
+                           (cid, t.weekday())).fetchone()
+        if slot:
+            con.execute("INSERT INTO lesson_changes(timetable_id,class_id,date,kind,room,note,author_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                        (slot[0], cid, iso(t), "room", "Sala 21", "Sala 12 e ocupată azi.", teacher_of["mate"], now))
+    admin = con.execute("SELECT id FROM users WHERE role='admin'").fetchone()[0]
+    stamp = lambda days_ago, hour: (datetime.combine(t - timedelta(days=days_ago), datetime.min.time()) + timedelta(hours=hour)).isoformat(timespec="seconds")
+    for class_id, author, title, body, prio, at in [
+        (None, admin, "Simularea la matematică, vineri", "Simularea pentru clasele a X-a are loc vineri, de la 9:00, în sălile 12–16. Aduceți calculator și instrumente de geometrie.", "urgent", stamp(1, 18)),
+        (cid, teacher_of["mate"], "Ședința cu părinții, joi la 18:00", "Ne vedem joi, la 18:00, în Sala 12. Discutăm situația de la jumătatea semestrului și excursia din primăvară.", "normal", stamp(0, 7.5)),
+        (cid, teacher_of["info"], "Proiectul de informatică se predă azi", "Încărcați link-ul către pagina voastră până la ora 20:00. Cine are nevoie de ajutor, mă găsește în pauza mare.", "info", stamp(2, 16)),
+    ]:
+        con.execute("INSERT INTO announcements(school_id,class_id,author_id,title,body,priority,created_at) VALUES(?,?,?,?,?,?,?)",
+                    (sid, class_id, author, title, body, prio, at))
+    for title, days, kind, note in [("Olimpiada de matematică — etapa pe școală", 12, "olimpiada", "Înscrieri la doamna Popescu."),
+                                    ("Club de robotică", 2, "club", "Miercuri, după ore, în Lab Info."),
+                                    ("Termen: înscrieri la concursul de eseuri", 5, "termen", None)]:
+        con.execute("INSERT INTO school_events(school_id,title,date,kind,note,author_id,created_at) VALUES(?,?,?,?,?,?,?)",
+                    (sid, title, iso(t + timedelta(days=days)), kind, note, admin, now))
+    con.execute("INSERT INTO messages(sender_id,recipient_id,body,anonymous,created_at,visible_at) VALUES(?,?,?,0,?,?)",
+                (teacher_of["mate"], students["Ana Popa"], "Bună, Ana! Am pus baremul pentru lucrarea de joi pe grup. Spor la recapitulare!", stamp(0, 7.75), stamp(0, 7.75)))
 
     return thu
 
