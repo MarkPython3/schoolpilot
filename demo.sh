@@ -8,6 +8,9 @@ sleep 0.5
 
 # demo mode: the QR code (/?qr) logs phones in as this student (Ana Popa, 10F); change the id to pick another
 export DEMO_STUDENT_ID="${DEMO_STUDENT_ID:-52}"
+# the demo day: the app's clock starts at Monday 23 Nov, 11:20 (Biology, moved to Lab B, is "acum")
+# and runs from there. Set DEMO_NOW= (empty) to use the real date.
+export DEMO_NOW="${DEMO_NOW-2026-11-23T11:20}"
 rm -f /tmp/schoolpilot-public-url
 python3 server.py > /tmp/schoolpilot-server.log 2>&1 &
 SERVER=$!

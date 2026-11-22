@@ -49,7 +49,11 @@ const API = {
   patch: (p, b) => jfetch(p, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }),
   del: (p) => jfetch(p, { method: 'DELETE' }),
 };
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// The app's clock follows the server's (pinned to the demo Monday when DEMO_NOW is set); only app logic uses it,
+// never Supabase, whose token expiry needs the real time.
+let clockOffset = 0;
+const appNow = () => new Date(Date.now() + clockOffset);
+const todayISO = () => { const d = appNow(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const MONTHS_RO = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const fmtDate = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(s || ''); return m ? `${Number(m[2])} ${MONTHS_RO[Number(m[1]) - 1]}` : (s || ''); };
@@ -1107,7 +1111,7 @@ function TeacherApp({ account, onLogout }) {
   );
 }
 const nextDateFor = (dayIdx) => {
-  const d = new Date();
+  const d = appNow();
   d.setDate(d.getDate() + ((dayIdx + 8 - d.getDay()) % 7)); // dayIdx 0 = Monday
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
@@ -1782,7 +1786,7 @@ function MessageThread({ threadKey, title, student, upcoming, quiet, subjects, o
     setBusy(true);
     API.post('/api/messages', { thread: threadKey, body: text, anonymous }).then((r) => {
       setText(''); setAnonymous(false); if (r.delayed) toast.info('Îl va vedea dimineața, la ora 7.');
-      if (r.thread && r.thread !== threadKey) { toast.success('Întrebarea anonimă are acum conversația ei.'); return onMoved && onMoved(r.thread); }
+      if (r.thread && r.thread !== threadKey) { toast.success('Trimis anonim. Îl găsești în conversația anonimă cu acest profesor.'); return onMoved && onMoved(r.thread); }
       return load();
     }).catch(toastError).finally(() => setBusy(false));
   };
@@ -1957,7 +1961,7 @@ function StudentToday({ s, reload, onGoto }) {
         </motion.section>
 
         <motion.div {...stagger(2)} className="flex flex-col">
-          <section className="border-t border-line pt-6 first:border-t-0 first:pt-0">
+          <section className="border-t-[1.5px] border-ink/20 pt-6 first:border-t-0 first:pt-0">
             <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">De predat curând</h2>
             <ul className="-mx-2 space-y-0.5">
               <AnimatePresence initial={false}>
@@ -1977,27 +1981,27 @@ function StudentToday({ s, reload, onGoto }) {
             </ul>
           </section>
           {t.changes.length > 0 && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <h2 className="mb-2.5 text-[13.5px] font-700 text-muted">Schimbări în orar</h2>
               <ul className="space-y-2">{t.changes.map((c) => <li key={c.id} className="min-w-0"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
             </section>
           )}
           {t.excuseDue.length > 0 && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <h2 className="text-[13.5px] font-700 text-muted">Adu scutirea</h2>
               <p className="mb-2 mt-1 text-[12.5px] text-muted">Absențe nemotivate recente. Verifică termenul cu dirigintele.</p>
               <ul className="space-y-1.5">{t.excuseDue.map((a) => <li key={a.id} className="text-sm"><b className="font-700">{a.subjectName}</b>, {fmtDate(a.date)}: până pe {fmtDate(a.until)}</li>)}</ul>
             </section>
           )}
           {t.nextDay && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <h2 className="text-[13.5px] font-700 text-muted">{t.nextDay.label}</h2>
               <p className="mt-1 text-[13px] text-muted">{t.nextDay.count === 1 ? '1 oră' : `${t.nextDay.count} ore`}, de la {t.nextDay.first}</p>
               <ul className="mt-3 space-y-1.5">{t.nextDay.pack.map((p) => <li key={p} className="flex items-center gap-2 text-sm"><Icons.bag size={15} className="shrink-0 text-muted" />{p}</li>)}</ul>
             </section>
           )}
           {t.announcements.length > 0 && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <button onClick={() => onGoto('announcements')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Anunțuri</h2><Icons.chevR size={16} className="text-muted" /></button>
               <ul className="space-y-2">{t.announcements.map((a) => (
                 <li key={a.id} className="min-w-0">
@@ -2008,7 +2012,7 @@ function StudentToday({ s, reload, onGoto }) {
             </section>
           )}
           {t.newGrades.length > 0 && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <button onClick={() => onGoto('marks')} className="mb-2.5 flex w-full items-center justify-between text-left"><h2 className="text-[13.5px] font-700 text-muted">Note noi</h2><Icons.chevR size={16} className="text-muted" /></button>
               <ul className="space-y-1.5">{t.newGrades.map((g) => (
                 <li key={g.id} className="flex items-center gap-2.5">
@@ -2019,7 +2023,7 @@ function StudentToday({ s, reload, onGoto }) {
             </section>
           )}
           {t.pack.length > 0 && (
-            <section className="mt-6 border-t border-line pt-6">
+            <section className="mt-6 border-t-[1.5px] border-ink/20 pt-6">
               <h2 className="mb-2.5 flex items-center gap-2 text-[13.5px] font-700 text-muted"><Icons.bag size={16} className="text-brand" /> De pus în ghiozdan</h2>
               <ul className="flex flex-wrap gap-2">{t.pack.map((p, i) => <motion.li key={p} initial={reduce ? false : { opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 + i * 0.04 }} className="rounded-lg bg-paper px-2.5 py-1.5 text-[13px] font-500 text-ink">{p}</motion.li>)}</ul>
             </section>
@@ -2789,6 +2793,7 @@ function Root() {
     const guard = setTimeout(() => { if (!settled) { done(); toLogin(); } }, 9000);
     if (qrMode || filmMode) return () => clearTimeout(guard);
     fetch('/api/config').then((r) => r.json()).then(async (cfg) => {
+      if (cfg.now) clockOffset = new Date(cfg.now).getTime() - Date.now();
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
       // /?demo (the stand's QR code): straight into the demo student's Azi
       if (new URLSearchParams(location.search).has('demo')) {

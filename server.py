@@ -42,6 +42,18 @@ def load_env(path=os.path.join(ROOT, ".env")):
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 load_env()
+
+# Demo day: DEMO_NOW=2026-11-23T11:20 starts the app's clock at that moment when the server starts
+# and lets it run in real time from there, so the demo always shows the same Monday. Off unless set
+# (demo.sh sets it). Token expiry and caches keep using the real time.
+if os.environ.get("DEMO_NOW"):
+    _real_datetime = datetime
+    _pin_from, _pin_started = _real_datetime.fromisoformat(os.environ["DEMO_NOW"]), time.time()
+
+    class datetime(_real_datetime):  # shadows the import on purpose
+        @classmethod
+        def now(cls, tz=None):
+            return _pin_from + timedelta(seconds=time.time() - _pin_started)
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")  # server-side only, never send or log
@@ -111,7 +123,7 @@ PACK_RULES = {"sport": "Echipament sport", "chim": "Halat de laborator",
               "art": "Trusă de desen"}
 
 def today():
-    return date.today()
+    return datetime.now().date()  # follows DEMO_NOW when it is set
 
 def week_monday(d=None):
     """Monday of the school week: on Saturday and Sunday that is the coming Monday."""
@@ -640,12 +652,18 @@ def message_row(r, uid):
     return {"id": r["id"], "mine": r["sender_id"] == uid, "body": r["body"], "at": r["created_at"], "anonymous": bool(r["anonymous"]),
             "pending": r["sender_id"] == uid and r["visible_at"] > datetime.now().isoformat(timespec="seconds")}
 
+def anon_root(con, a, b):
+    """A student and a teacher have ONE anonymous conversation, keyed by its first message (always the
+    student's question). Later anonymous questions to the same teacher join it."""
+    return con.execute("""SELECT MIN(id) m FROM messages WHERE anonymous=1
+                          AND ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?))""", (a, b, b, a)).fetchone()["m"]
+
 def build_threads(con, me):
     uid, now, threads = me["id"], datetime.now().isoformat(timespec="seconds"), {}
     rows = con.execute("SELECT * FROM messages WHERE (sender_id=? OR (recipient_id=? AND visible_at<=?)) ORDER BY id", (uid, uid, now)).fetchall()
     for r in rows:
         if r["anonymous"]:  # its own thread; on the teacher's side never tied to the student's name
-            root = r["reply_to"] or r["id"]
+            root = anon_root(con, r["sender_id"], r["recipient_id"])
             if me["role"] == "teacher":
                 key, name, other = "anon:%d" % root, "Întrebare anonimă", None
             else:
@@ -663,9 +681,12 @@ def build_threads(con, me):
 def thread_rows(con, me, key):
     uid, now = me["id"], datetime.now().isoformat(timespec="seconds")
     if key.startswith("anon:"):
-        root = int(key[5:])
-        return con.execute("""SELECT * FROM messages WHERE anonymous=1 AND (id=? OR reply_to=?) AND (sender_id=? OR recipient_id=?)
-                              AND (sender_id=? OR visible_at<=?) ORDER BY id""", (root, root, uid, uid, uid, now)).fetchall()
+        q = con.execute("SELECT * FROM messages WHERE id=? AND anonymous=1 AND (sender_id=? OR recipient_id=?)", (int(key[5:]), uid, uid)).fetchone()
+        if not q:
+            return []
+        a, b = q["sender_id"], q["recipient_id"]
+        return con.execute("""SELECT * FROM messages WHERE anonymous=1 AND ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?))
+                              AND (sender_id=? OR visible_at<=?) ORDER BY id""", (a, b, b, a, uid, now)).fetchall()
     other = int(key[5:])
     return con.execute("""SELECT * FROM messages WHERE ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=? AND visible_at<=?))
                           AND anonymous=0 ORDER BY id""", (uid, other, other, uid, now)).fetchall()
@@ -689,12 +710,16 @@ def send_message(con, me, body):
         if to not in [c["id"] for c in message_contacts(con, me)]:
             raise HttpError(403, "Nu poți scrie acestei persoane.")
         anonymous = 1 if body.get("anonymous") and me["role"] == "student" else 0
+        if anonymous:  # joins the existing anonymous conversation with this teacher, if there is one
+            reply_to = anon_root(con, me["id"], to)
+            if reply_to:
+                key = "anon:%d" % reply_to
     visible = delivery_time(moment) if me["role"] == "student" else moment
     cur = con.execute("INSERT INTO messages(sender_id,recipient_id,body,anonymous,reply_to,created_at,visible_at) VALUES(?,?,?,?,?,?,?)",
                       (me["id"], to, text, anonymous, reply_to, moment.isoformat(timespec="seconds"), visible.isoformat(timespec="seconds")))
     if me["role"] == "teacher":
         notify(con, to, "message", "Mesaj de la %s" % me["name"], text[:80], "message:%d" % cur.lastrowid)
-    if anonymous and not key.startswith("anon:"):  # a new anonymous question starts its own thread
+    if anonymous and not key.startswith("anon:"):  # the first anonymous question to this teacher
         key = "anon:%d" % cur.lastrowid
     return {"id": cur.lastrowid, "delayed": visible > moment, "thread": key or "user:%d" % to}
 
@@ -1551,7 +1576,8 @@ class Handler(BaseHTTPRequestHandler):
                 out["token"] = demo_pass(uid)
             return self._json(out)
         if p == "/api/config":  # public: never add the secret key here
-            return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY})
+            return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY,
+                               "now": datetime.now().isoformat(timespec="seconds")})  # the app's clock (pinned on demo day)
         if p.startswith("/api/"):
             return self._api(lambda con: self.get_api(p, con))
         try:
