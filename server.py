@@ -652,6 +652,14 @@ def message_row(r, uid):
     return {"id": r["id"], "mine": r["sender_id"] == uid, "body": r["body"], "at": r["created_at"], "anonymous": bool(r["anonymous"]),
             "pending": r["sender_id"] == uid and r["visible_at"] > datetime.now().isoformat(timespec="seconds")}
 
+def preview(text, n=80):
+    """One line of a message for lists and notifications: whitespace collapsed, cut at a word, with '…'."""
+    text = " ".join((text or "").split())
+    if len(text) <= n:
+        return text
+    cut = text[:n - 1].rsplit(" ", 1)[0] if " " in text[:n - 1] else text[:n - 1]
+    return cut.rstrip(" ,.;:!?-—") + "…"
+
 def anon_root(con, a, b):
     """A student and a teacher have ONE anonymous conversation, keyed by its first message (always the
     student's question). Later anonymous questions to the same teacher join it."""
@@ -673,7 +681,7 @@ def build_threads(con, me):
             other = r["recipient_id"] if r["sender_id"] == uid else r["sender_id"]
             key, name = "user:%d" % other, (user_row(con, other) or {"name": "Cont șters"})["name"]
         t = threads.setdefault(key, {"key": key, "name": name, "anonymous": other is None, "unread": 0})
-        t.update({"last": r["body"][:80], "at": r["created_at"], "lastId": r["id"]})
+        t.update({"last": preview(r["body"]), "at": r["created_at"], "lastId": r["id"]})
         if r["recipient_id"] == uid and not r["read_at"]:
             t["unread"] += 1
     return {"contacts": message_contacts(con, me), "threads": sorted(threads.values(), key=lambda t: -t["lastId"]), "quietHours": [QUIET_START, QUIET_END]}
@@ -718,7 +726,7 @@ def send_message(con, me, body):
     cur = con.execute("INSERT INTO messages(sender_id,recipient_id,body,anonymous,reply_to,created_at,visible_at) VALUES(?,?,?,?,?,?,?)",
                       (me["id"], to, text, anonymous, reply_to, moment.isoformat(timespec="seconds"), visible.isoformat(timespec="seconds")))
     if me["role"] == "teacher":
-        notify(con, to, "message", "Mesaj de la %s" % me["name"], text[:80], "message:%d" % cur.lastrowid)
+        notify(con, to, "message", "Mesaj de la %s" % me["name"], preview(text), "message:%d" % cur.lastrowid)
     if anonymous and not key.startswith("anon:"):  # the first anonymous question to this teacher
         key = "anon:%d" % cur.lastrowid
     return {"id": cur.lastrowid, "delayed": visible > moment, "thread": key or "user:%d" % to}
