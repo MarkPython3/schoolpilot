@@ -2580,7 +2580,8 @@ function Landing({ onLogin }) {
 
 // /?film — the welcome page as a self-running 16:9 loop, for the stand screen (press F11) and for recording.
 // One clock t (seconds) drives everything, so each segment is a pure function of time.
-const LOOP = { hero: 11, scene: 6.5, devices: 5, end: 6 };
+const LOOP = { hero: 9.5, scene: 6.5, devices: 5, end: 6 };
+const LOOP_CLIP = { src: '/media/hero-film.mp4', at: 0.3 }; // the original Higgsfield clip: 24 fps, 1364×768, 5.9 s
 const LOOP_SCENES = [
   { Visual: OrarScene, shot: '/media/app/scene-orar.webp', title: 'Tot orarul, într-o privire.', body: 'Zilele tale, colorate pe materii: ce urmează, la ce oră și în ce sală.' },
   { Visual: NoteScene, shot: '/media/app/scene-note.webp', flip: true, title: 'Notele și media, mereu la zi.', body: 'Plus calculatorul: câte note îți mai trebuie ca să ajungi la media dorită.' },
@@ -2617,11 +2618,15 @@ function FilmLoop() {
   const scale = () => Math.min(1.6, Math.max(1, window.innerHeight / 760)); // the scene cards grow on big screens
   const [zoom, setZoom] = useState(scale);
   useEffect(() => { const on = () => setZoom(scale()); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
-  const imgs = useRef([]), canvas = useRef(null), shown = useRef(-1);
+  const video = useRef(null);
   const record = new URLSearchParams(location.search).has('record'); // no QR in a recorded video: the address changes
   useEffect(() => {
-    let left = FILM.n;
-    imgs.current = Array.from({ length: FILM.n }, (_, i) => { const im = new Image(); im.onload = im.onerror = () => { if (--left === 0) setReady(true); }; im.src = FILM.src(i); return im; });
+    // play the clip itself (smooth, full frame rate), from memory so it can rewind on every loop
+    let url;
+    fetch(LOOP_CLIP.src).then((r) => r.blob()).then((blob) => {
+      url = URL.createObjectURL(blob); const v = video.current; v.src = url;
+      v.addEventListener('canplaythrough', () => setReady(true), { once: true }); v.load();
+    }).catch(() => setReady(true));
     if (!record) {
       fetch('/api/demo').then((r) => r.json()).then((d) => {
         if (!d.enabled || !d.publicUrl) return;
@@ -2630,31 +2635,31 @@ function FilmLoop() {
       }).catch(() => {});
     }
     document.body.style.cursor = 'none';
-    return () => { document.body.style.cursor = ''; };
+    return () => { document.body.style.cursor = ''; if (url) URL.revokeObjectURL(url); };
   }, []);
-  const draw = (v) => {
-    const cv = canvas.current; if (!cv) return;
-    const i = Math.round(Math.min(1, Math.max(0, v / 8)) * (FILM.n - 1));
-    const im = imgs.current[i]; if (i === shown.current || !im || !im.complete || !im.naturalWidth) return;
-    const ctx = cv.getContext('2d'), sc = Math.max(cv.width / im.naturalWidth, cv.height / im.naturalHeight), sw = cv.width / sc, sh = cv.height / sc;
-    ctx.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, 0, 0, cv.width, cv.height); shown.current = i;
+  // keep the clip in step with the loop clock: play during the hero, hold its last frame, rewind for the next loop
+  const sync = (v) => {
+    const el = video.current; if (!el || !el.duration) return;
+    const want = Math.min(el.duration, Math.max(0, v - LOOP_CLIP.at));
+    if (v < LOOP.hero && want < el.duration - 0.05) {
+      if (Math.abs(el.currentTime - want) > 0.25) el.currentTime = want;
+      if (el.paused && v >= LOOP_CLIP.at) el.play().catch(() => {});
+    } else if (v >= LOOP.hero) { if (!el.paused) el.pause(); if (v > LOOP_TOTAL - 0.3 && el.currentTime !== 0) el.currentTime = 0; }
   };
-  useMotionValueEvent(t, 'change', draw);
+  useMotionValueEvent(t, 'change', sync);
   useEffect(() => {
     if (!ready) return;
-    const size = () => { const cv = canvas.current, r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); shown.current = -1; draw(t.get()); };
-    size(); window.addEventListener('resize', size);
     let raf, start = performance.now();
     const tick = (now) => { t.set(((now - start) / 1000) % LOOP_TOTAL); raf = requestAnimationFrame(tick); };
     // ?record: hold on the first frame until the recorder calls __filmGo(), so the video starts at 0
     if (record) window.__filmGo = () => { start = performance.now(); raf = requestAnimationFrame(tick); };
     else raf = requestAnimationFrame(tick);
     window.__filmTotal = LOOP_TOTAL; window.__filmReady = true;
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', size); };
+    return () => cancelAnimationFrame(raf);
   }, [ready]);
   const heroO = fadeIO(t, 0, LOOP.hero);
   const beat = (a, b) => ({ opacity: useTransform(t, [a, a + 0.4, b - 0.4, b], [0, 1, 1, 0]), y: useTransform(t, [a, a + 0.4, b - 0.4, b], [16, 0, 0, -16]) });
-  const beats = [beat(0.2, 4), beat(4, 8.2), beat(8.4, LOOP.hero)];
+  const beats = [beat(0.3, 3.2), beat(3.2, 6.3), beat(6.5, LOOP.hero)]; // the clip ends at ~6.2 s; the last line lands on the finished week
   const devO = fadeIO(t, LOOP_DEVICES, LOOP_END);
   const lapY = useTransform(t, [LOOP_DEVICES - 0.5, LOOP_END], [60, -10]), phoneY = useTransform(t, [LOOP_DEVICES - 0.5, LOOP_END], [140, -30]);
   const endO = useTransform(t, [LOOP_END - 0.5, LOOP_END, LOOP_TOTAL - 0.6, LOOP_TOTAL], [0, 1, 1, 0]);
@@ -2669,7 +2674,7 @@ function FilmLoop() {
         <motion.div style={{ opacity: heroO }} className="absolute inset-0 flex flex-col items-center px-[4vw] pt-[6vh] text-center">
           <h1 className="font-display font-700 leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(2.6rem, 7.4vh, 6.6rem)' }}>Săptămâna ta,<br />pusă în ordine dinainte.</h1>
           <div className="relative mt-[2vh] flex min-h-0 w-full flex-1 items-center justify-center">
-            <canvas ref={canvas} aria-hidden="true" className="block h-auto" style={{ aspectRatio: '1.7778', width: 'min(100%, calc((100vh - 38vh) * 1.7778))', WebkitMaskImage: fade, maskImage: fade, WebkitMaskComposite: 'source-in', maskComposite: 'intersect' }} />
+            <video ref={video} muted playsInline preload="auto" aria-hidden="true" className="block h-auto object-cover" style={{ aspectRatio: '1364 / 768', width: 'min(100%, calc((100vh - 38vh) * 1.776))', WebkitMaskImage: fade, maskImage: fade, WebkitMaskComposite: 'source-in', maskComposite: 'intersect' }} />
           </div>
           <div className="relative mb-[6vh] h-[7vh] w-full">
             {FILM_BEATS.map((txt, i) => <motion.p key={i} style={beats[i]} className="absolute inset-x-0 mx-auto max-w-[80vw] font-display font-700 leading-[1.1]" >{<span style={{ fontSize: 'clamp(1.6rem, 4.2vh, 3.6rem)' }}>{txt}</span>}</motion.p>)}
