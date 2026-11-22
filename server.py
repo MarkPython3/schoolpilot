@@ -410,13 +410,52 @@ def demo_student_id():
 def _demo_key():
     return hmac.new((SUPABASE_SECRET_KEY or "schoolpilot").encode(), b"schoolpilot-demo-pass", hashlib.sha256).digest()
 
-def demo_pass(uid):
-    body = base64.urlsafe_b64encode(json.dumps({"u": uid, "exp": int(time.time()) + DEMO_TTL}).encode()).decode().rstrip("=")
+# Each pass gets its own sandbox: an in-memory copy of the database taken when the pass is issued. A
+# visitor's ticks, reads, goals and messages only change their copy, so a reload (new pass) starts again
+# from the original, visitors never see each other's changes, and the real database is never written.
+DEMO_SANDBOX_IDLE = 3 * 3600
+DEMO_SANDBOX_MAX = 300
+_sandboxes = {}  # sandbox id -> [sqlite connection, last used]
+
+def demo_sandbox_new():
+    """Copy the live database into memory; call with _lock held."""
+    now = time.time()
+    for k in [k for k, v in _sandboxes.items() if now - v[1] > DEMO_SANDBOX_IDLE]:
+        _sandboxes.pop(k)[0].close()
+    while len(_sandboxes) >= DEMO_SANDBOX_MAX:
+        _sandboxes.pop(min(_sandboxes, key=lambda k: _sandboxes[k][1]))[0].close()
+    mem = sqlite3.connect(":memory:", check_same_thread=False)
+    src = connect()
+    try:
+        src.backup(mem)
+    finally:
+        src.close()
+    mem.row_factory = sqlite3.Row
+    mem.execute("PRAGMA foreign_keys=ON")
+    sid = secrets.token_hex(8)
+    _sandboxes[sid] = [mem, now]
+    return sid
+
+def demo_sandbox(token):
+    """The sandbox connection behind a valid demo pass, or None (expired, or the server restarted)."""
+    data = demo_pass_data(token)
+    box = _sandboxes.get(data.get("s")) if data else None
+    if not box:
+        return None
+    box[1] = time.time()
+    return box[0]
+
+def demo_pass(uid, sid):
+    body = base64.urlsafe_b64encode(json.dumps({"u": uid, "s": sid, "exp": int(time.time()) + DEMO_TTL}).encode()).decode().rstrip("=")
     sig = hmac.new(_demo_key(), body.encode(), hashlib.sha256).hexdigest()
     return "demo.%s.%s" % (body, sig)
 
 def demo_identity(token):
     """The demo student's id for a valid pass, else None."""
+    data = demo_pass_data(token)
+    return data["u"] if data else None
+
+def demo_pass_data(token):
     try:
         _, body, sig = token.split(".")
         if not hmac.compare_digest(sig, hmac.new(_demo_key(), body.encode(), hashlib.sha256).hexdigest()):
@@ -426,7 +465,7 @@ def demo_identity(token):
         return None
     if data.get("exp", 0) < time.time() or data.get("u") != demo_student_id():
         return None
-    return data["u"]
+    return data
 
 def public_url():
     try:
@@ -1550,22 +1589,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api(self, fn):
         with _lock:
-            con = connect()
+            h = self.headers.get("Authorization", "")
+            sandbox = None
+            if h.startswith("Bearer demo."):  # a demo visitor works on their own copy, never the real database
+                sandbox = demo_sandbox(h[7:].strip())
+                if not sandbox:
+                    return self._json({"error": "Sesiunea demo a expirat. Scanează din nou codul."}, 401)
+            con = sandbox or connect()
             try:
                 res = fn(con)
                 con.commit()
                 self._json(res if res is not None else {"ok": True})
             except HttpError as e:
+                con.rollback()
                 payload = {"error": e.msg}
                 if e.msg == MUST_CHANGE_MSG:  # the app then shows "Setează o parolă nouă"
                     payload["mustChangePassword"] = True
                 self._json(payload, e.code)
             except KeyError as e:
+                con.rollback()
                 self._json({"error": "missing field %s" % e}, 400)
             except Exception as e:
+                con.rollback()
                 self._json({"error": str(e)}, 400)
             finally:
-                con.close()
+                if not sandbox:
+                    con.close()
 
     def do_GET(self):
         p = urlparse(self.path).path
@@ -1577,11 +1626,13 @@ class Handler(BaseHTTPRequestHandler):
                     u = user_row(con, uid) if uid else None
                 finally:
                     con.close()
+                if u and u["role"] == "student" and want_pass:
+                    sid = demo_sandbox_new()  # a fresh copy for every scan and every reload
             if not u or u["role"] != "student":
                 return self._json({"enabled": False, "publicUrl": public_url()}, 404 if want_pass else 200)
             out = {"enabled": True, "name": u["name"], "publicUrl": public_url()}
             if want_pass:
-                out["token"] = demo_pass(uid)
+                out["token"] = demo_pass(uid, sid)
             return self._json(out)
         if p == "/api/config":  # public: never add the secret key here
             return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY,

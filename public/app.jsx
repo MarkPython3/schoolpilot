@@ -25,9 +25,12 @@ const HEAT = {
 let sb = null;
 let onUnauthorized = () => {};
 let onMustChangePassword = () => {}; // the admin reset this account's password mid-session
-// Demo pass (the stand's QR code): the server signs it, no Supabase session involved
-let demoToken = localStorage.getItem('sp-demo') || null;
-const setDemo = (t) => { demoToken = t; if (t) localStorage.setItem('sp-demo', t); else localStorage.removeItem('sp-demo'); };
+// Demo pass (the stand's QR code): the server signs it, no Supabase session involved. The pass lives only in
+// memory: each page load asks for a new one, i.e. a fresh copy of the demo data, so a reload undoes everything.
+// sessionStorage only remembers that this tab is in demo mode.
+let demoToken = null;
+localStorage.removeItem('sp-demo'); // passes used to be kept here
+const setDemo = (t) => { demoToken = t; if (t) sessionStorage.setItem('sp-demo', '1'); else sessionStorage.removeItem('sp-demo'); };
 const authHeader = async () => {
   if (demoToken) return { Authorization: `Bearer ${demoToken}` };
   if (!sb) return {};
@@ -2007,7 +2010,7 @@ function StudentToday({ s, reload, onGoto }) {
               </>}
         </motion.section>
 
-        <motion.div {...stagger(2)} className="flex flex-col gap-4">
+        <motion.div {...stagger(2)} className="flex flex-col gap-4 lg:gap-6">
           <AziCard icon={Icons.book} title="De predat curând">
             <ul className="-mx-2 space-y-0.5">
               <AnimatePresence initial={false}>
@@ -2028,7 +2031,7 @@ function StudentToday({ s, reload, onGoto }) {
           </AziCard>
           {t.changes.length > 0 && (
             <AziCard icon={Icons.clock} title="Schimbări în orar">
-              <ul className="space-y-2.5">{t.changes.map((c) => <li key={c.id} className="min-w-0 rounded-lg bg-heat-busybg/50 px-3 py-2"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
+              <ul className="space-y-2.5">{t.changes.map((c) => <li key={c.id} className="min-w-0 rounded-lg bg-heat-busybg/50 px-3 py-2 lg:rounded-none lg:bg-transparent lg:p-0"><p className="text-sm font-700">{c.subjectName}: {c.label}</p><p className="text-[12.5px] text-muted">{fmtDate(c.date)}, {c.time}{c.note && ` · ${c.note}`}</p></li>)}</ul>
             </AziCard>
           )}
           {t.excuseDue.length > 0 && (
@@ -2071,19 +2074,20 @@ function StudentToday({ s, reload, onGoto }) {
     </div>
   );
 }
-// Azi side column: each block is its own card with a clear title, so they read apart on a phone
+// Azi side column. Phones and tablets: each block is its own card with an icon and a clear title, so they read
+// apart. Desktop (lg, two columns): the quieter original, blocks separated by rules with small grey titles.
 function AziCard({ icon: I, title, sub, onMore, children }) {
   const head = (
     <span className="flex min-w-0 items-center gap-2.5">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600"><I size={16} /></span>
-      <h2 className="truncate font-display text-[16px] font-700 text-ink">{title}</h2>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 lg:hidden"><I size={16} /></span>
+      <h2 className="truncate font-display text-[16px] font-700 text-ink lg:font-sans lg:text-[13.5px] lg:tracking-normal lg:text-muted">{title}</h2>
     </span>
   );
   return (
-    <section className="rounded-xl2 border border-line bg-white p-4 shadow-card">
+    <section className="rounded-xl2 border border-line bg-white p-4 shadow-card lg:rounded-none lg:border-0 lg:border-t-[1.5px] lg:border-ink/20 lg:bg-transparent lg:p-0 lg:pt-6 lg:shadow-none lg:first:border-t-0 lg:first:pt-0">
       {onMore ? <button onClick={onMore} className="flex w-full items-center justify-between gap-2 text-left">{head}<Icons.chevR size={17} className="shrink-0 text-muted" /></button> : head}
       {sub && <p className="mt-1.5 text-[12.5px] text-muted">{sub}</p>}
-      <div className="mt-3">{children}</div>
+      <div className="mt-3 lg:mt-2.5">{children}</div>
     </section>
   );
 }
@@ -2839,7 +2843,11 @@ function Root() {
   };
   useEffect(() => {
     onUnauthorized = () => {
-      if (demoToken) { setDemo(null); setAccount(null); setPhase('landing'); return; }
+      if (demoToken) { // the copy expired (or the server restarted): start a fresh one, but never loop
+        const last = Number(sessionStorage.getItem('sp-demo-retry') || 0);
+        if (Date.now() - last > 10000) { sessionStorage.setItem('sp-demo-retry', String(Date.now())); location.reload(); return; }
+        setDemo(null); setAccount(null); setPhase('landing'); return;
+      }
       if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.');
     };
     onMustChangePassword = () => { loadMe().catch((e) => toLogin(errText(e))); };
@@ -2853,11 +2861,11 @@ function Root() {
       if (cfg.now) clockOffset = new Date(cfg.now).getTime() - Date.now();
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
       // /?demo (the stand's QR code): straight into the demo student's Azi
-      if (new URLSearchParams(location.search).has('demo')) {
+      if (new URLSearchParams(location.search).has('demo') || sessionStorage.getItem('sp-demo')) {
         const d = await fetch('/api/demo?pass=1').then((r) => r.json()).catch(() => ({}));
         history.replaceState(null, '', location.pathname);
         if (d.token) setDemo(d.token);
-        else { done(); setNotice('Modul demo nu este pornit acum.'); return setPhase('landing'); }
+        else { setDemo(null); done(); setNotice('Modul demo nu este pornit acum.'); return setPhase('landing'); }
       }
       if (demoToken) {
         try { await loadMe(); } catch (e) { setDemo(null); setPhase('landing'); } finally { done(); }
