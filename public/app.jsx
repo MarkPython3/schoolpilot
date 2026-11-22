@@ -37,8 +37,10 @@ const authHeader = async () => {
   const { data } = await sb.auth.getSession();
   return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
 };
+// A random id per page load: on demo day the server gives some accounts a fresh copy of the data for each one
+const PAGE_SESSION = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^A-Za-z0-9-]/g, '');
 const jfetch = async (url, opts = {}) => {
-  const headers = { ...(opts.headers || {}), ...(await authHeader()) };
+  const headers = { ...(opts.headers || {}), ...(await authHeader()), 'X-Page-Session': PAGE_SESSION };
   const r = await fetch(url, { ...opts, headers }).catch(() => { throw new Error('Nu pot contacta serverul.'); });
   const d = await r.json().catch(() => ({}));
   if (r.status === 401) onUnauthorized();
@@ -1946,7 +1948,20 @@ function StudentToday({ s, reload, onGoto }) {
   const reduce = useReducedMotion();
   const t = s.today;
   const stagger = (i) => reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.05 + i * 0.07, ...spring } };
-  const toggle = (task) => API.patch(`/api/tasks/${task.id}`, { done: !task.done }).then(reload).catch(toastError);
+  // Ticking answers at once: the box fills and the title is struck through, then (after the animation has
+  // been seen) it is saved and the finished item slides out of the list.
+  const [ticking, setTicking] = useState({});
+  const toggle = (task) => {
+    if (ticking[task.id] !== undefined) return;
+    const next = !task.done;
+    setTicking((m) => ({ ...m, [task.id]: next }));
+    setTimeout(() => {
+      API.patch(`/api/tasks/${task.id}`, { done: next })
+        .then(() => { if (next) toast.success('Bravo! Temă bifată.'); return reload(); })
+        .catch(toastError)
+        .finally(() => setTicking((m) => { const n = { ...m }; delete n[task.id]; return n; }));
+    }, reduce ? 0 : 700);
+  };
   if (!s.student.classId) return <div><ViewHead title={`Bună, ${s.student.name.split(' ')[0]}`} icon={<Icons.sun />} /><Empty icon={<Icons.sun size={26} />} title="Încă nu ești într-o clasă" body="Administratorul te repartizează la o clasă și îți adaugă orarul. Apoi aici apare rezumatul zilei tale." /></div>;
   return (
     <div>
@@ -2016,13 +2031,12 @@ function StudentToday({ s, reload, onGoto }) {
               <AnimatePresence initial={false}>
                 {t.due.length === 0 && <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-2 py-1 text-[13px] text-muted">Nimic urgent — zi liniștită.</motion.li>}
                 {t.due.map((task) => (
-                  <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                  <motion.li key={task.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0, x: 32, transition: { duration: 0.38, ease: [0.4, 0, 0.2, 1] } }} className="overflow-hidden">
                     {task.kind === 'task'
-                      ? <button onClick={() => toggle(task)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-paper">
-                          <span className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2', task.done ? 'border-brand bg-brand text-white' : 'border-line')}>{task.done && <Icons.check size={14} sw={3} />}</span>
-                          <span className="min-w-0 flex-1"><span className={cx('block truncate text-sm font-600', task.done && 'text-muted line-through')}>{task.title}</span><span className="block text-[12px] text-muted">{task.short ? task.short + ' · ' : ''}{task.typeLabel}</span></span>
+                      ? <TaskTick task={task} done={ticking[task.id] !== undefined ? ticking[task.id] : task.done} onToggle={() => toggle(task)}>
                           <Pill tone={task.bucket === 'today' ? 'heavy' : 'muted'} className={task.bucket === 'today' ? 'bg-heat-heavybg' : ''}>{task.dueLabel}</Pill>
-                        </button>
+                        </TaskTick>
                       : <div className="flex w-full items-center gap-3 rounded-xl p-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-heat-heavybg text-heat-heavy"><Icons.alert size={13} /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-600">{task.title}</span><span className="block text-[12px] text-muted">{task.short} · {task.typeLabel}</span></span><Pill tone={task.bucket === 'today' ? 'heavy' : 'muted'} className={task.bucket === 'today' ? 'bg-heat-heavybg' : ''}>{task.dueLabel}</Pill></div>}
                   </motion.li>
                 ))}
@@ -2072,6 +2086,32 @@ function StudentToday({ s, reload, onGoto }) {
         </motion.div>
       </div>
     </div>
+  );
+}
+// A homework row you can tick: the box pops and fills, the tick draws itself, the title is struck through
+// left to right and the row glows green for a moment. Unticking plays it backwards.
+function TaskTick({ task, done, onToggle, children }) {
+  return (
+    <motion.button onClick={onToggle} aria-pressed={done} whileTap={{ scale: 0.97 }}
+      animate={{ backgroundColor: done ? 'rgba(20,138,91,0.10)' : 'rgba(20,138,91,0)' }} transition={{ duration: 0.35 }}
+      className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-paper">
+      <motion.span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border-2"
+        animate={done ? { scale: [1, 0.82, 1.14, 1], backgroundColor: '#148a5b', borderColor: '#148a5b' } : { scale: 1, backgroundColor: 'rgba(255,255,255,0)', borderColor: '#d7dfd3' }}
+        transition={{ duration: 0.42, times: [0, 0.25, 0.65, 1], ease: 'easeOut' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <motion.path d="M20 6 9 17l-5-5" initial={false} animate={{ pathLength: done ? 1 : 0, opacity: done ? 1 : 0 }} transition={{ duration: 0.3, delay: done ? 0.12 : 0, ease: 'easeOut' }} />
+        </svg>
+      </motion.span>
+      <span className="min-w-0 flex-1">
+        <span className="relative inline-block max-w-full align-top">
+          <motion.span className="block truncate text-sm font-600" animate={{ color: done ? '#5c6b61' : '#17231d' }} transition={{ duration: 0.3 }}>{task.title}</motion.span>
+          <motion.span aria-hidden="true" className="absolute left-0 right-0 top-1/2 h-[1.5px] origin-left rounded-full bg-current text-muted" initial={false}
+            animate={{ scaleX: done ? 1 : 0 }} transition={{ duration: 0.35, delay: done ? 0.18 : 0, ease: [0.16, 1, 0.3, 1] }} />
+        </span>
+        <span className="block text-[12px] text-muted">{task.short ? task.short + ' · ' : ''}{task.typeLabel}</span>
+      </span>
+      {children}
+    </motion.button>
   );
 }
 // Azi side column. Phones and tablets: each block is its own card with an icon and a clear title, so they read

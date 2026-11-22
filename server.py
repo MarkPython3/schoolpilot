@@ -411,11 +411,27 @@ def _demo_key():
     return hmac.new((SUPABASE_SECRET_KEY or "schoolpilot").encode(), b"schoolpilot-demo-pass", hashlib.sha256).digest()
 
 # Each pass gets its own sandbox: an in-memory copy of the database taken when the pass is issued. A
-# visitor's ticks, reads, goals and messages only change their copy, so a reload (new pass) starts again
-# from the original, visitors never see each other's changes, and the real database is never written.
+# visitor's ticks, reads and goals only change their copy, so a reload (new pass) starts again from the
+# original and visitors never see each other's homework. Messages are the exception: /api/messages*
+# runs on the real database (teachers get them and can answer), and each request re-syncs them into the copy.
 DEMO_SANDBOX_IDLE = 3 * 3600
 DEMO_SANDBOX_MAX = 300
 _sandboxes = {}  # sandbox id -> [sqlite connection, last used]
+
+def demo_reset_ids():
+    """Real accounts (by user id) that also get a fresh copy on every page load during the demo, e.g. the
+    student shown on stage: DEMO_RESET_IDS=44 (demo.sh sets it). Their messages stay real."""
+    return {int(x) for x in re.findall(r"\d+", os.environ.get("DEMO_RESET_IDS", ""))}
+
+def demo_sandbox_for_page(key):
+    """The copy for one page load of a reset account (key = user id + the page's random id); call with _lock held."""
+    box = _sandboxes.get(key)
+    if box:
+        box[1] = time.time()
+        return box[0]
+    sid = demo_sandbox_new()
+    _sandboxes[key] = _sandboxes.pop(sid)
+    return _sandboxes[key][0]
 
 def demo_sandbox_new():
     """Copy the live database into memory; call with _lock held."""
@@ -444,6 +460,18 @@ def demo_sandbox(token):
         return None
     box[1] = time.time()
     return box[0]
+
+def demo_sync_messages(mem):
+    """Messages are the one shared, real thing in demo mode: refresh the copy's messages from the live
+    database so the unread badges and threads match what teachers really sent."""
+    mem.commit()
+    mem.execute("ATTACH DATABASE ? AS live", (DB_PATH,))
+    try:
+        mem.execute("DELETE FROM main.messages")
+        mem.execute("INSERT INTO main.messages SELECT * FROM live.messages")
+        mem.commit()
+    finally:
+        mem.execute("DETACH DATABASE live")
 
 def demo_pass(uid, sid):
     body = base64.urlsafe_b64encode(json.dumps({"u": uid, "s": sid, "exp": int(time.time()) + DEMO_TTL}).encode()).decode().rstrip("=")
@@ -1591,10 +1619,33 @@ class Handler(BaseHTTPRequestHandler):
         with _lock:
             h = self.headers.get("Authorization", "")
             sandbox = None
-            if h.startswith("Bearer demo."):  # a demo visitor works on their own copy, never the real database
+            if h.startswith("Bearer demo."):  # a demo visitor works on their own copy...
                 sandbox = demo_sandbox(h[7:].strip())
                 if not sandbox:
                     return self._json({"error": "Sesiunea demo a expirat. Scanează din nou codul."}, 401)
+                if urlparse(self.path).path.startswith("/api/messages"):
+                    sandbox = None  # ...except messages, which are real
+                else:
+                    demo_sync_messages(sandbox)
+            elif demo_reset_ids() and h.startswith("Bearer "):
+                # a real account on the reset list: same treatment, one copy per page load. A tab without the
+                # page id (opened before an update) still never writes for real: its copy follows the login token.
+                page = self.headers.get("X-Page-Session", "")
+                if not re.fullmatch(r"[A-Za-z0-9-]{8,64}", page):
+                    page = "tok-" + hashlib.sha256(h[7:].strip().encode()).hexdigest()[:16]
+                try:
+                    email = token_identity(h[7:].strip())["email"]
+                except HttpError:
+                    email = None
+                if email:
+                    live = connect()
+                    try:
+                        u = live.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+                    finally:
+                        live.close()
+                    if u and u["id"] in demo_reset_ids() and not urlparse(self.path).path.startswith("/api/messages"):
+                        sandbox = demo_sandbox_for_page("u%d:%s" % (u["id"], page))
+                        demo_sync_messages(sandbox)
             con = sandbox or connect()
             try:
                 res = fn(con)
