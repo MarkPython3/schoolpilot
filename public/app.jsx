@@ -25,7 +25,11 @@ const HEAT = {
 let sb = null;
 let onUnauthorized = () => {};
 let onMustChangePassword = () => {}; // the admin reset this account's password mid-session
+// Demo pass (the stand's QR code): the server signs it, no Supabase session involved
+let demoToken = localStorage.getItem('sp-demo') || null;
+const setDemo = (t) => { demoToken = t; if (t) localStorage.setItem('sp-demo', t); else localStorage.removeItem('sp-demo'); };
 const authHeader = async () => {
+  if (demoToken) return { Authorization: `Bearer ${demoToken}` };
   if (!sb) return {};
   const { data } = await sb.auth.getSession();
   return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
@@ -668,6 +672,12 @@ function Shell({ account, nav, view, setView, onLogout, onHome, children }) {
           </aside>
 
           <main className="min-w-0 flex-1">
+            {account.demo && (
+              <div className="flex items-center justify-between gap-3 bg-brand px-4 py-2 text-[13px] font-600 text-white" role="status">
+                <span>Mod demo: ești {account.name}, din {account.class}.</span>
+                <button onClick={onLogout} className="shrink-0 rounded-full bg-white/15 px-3 py-1 font-700 hover:bg-white/25">Ieși</button>
+              </div>
+            )}
             <header className="edge-b sticky top-0 z-30 flex items-center justify-between bg-white/80 px-4 py-3 backdrop-blur lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
               <button onClick={goHome} aria-label="Pagina principală" className="flex items-center gap-2"><Logo size={30} /><span className="font-display text-base font-800">SchoolPilot</span></button>
               <div className="flex items-center gap-1.5">
@@ -2568,12 +2578,189 @@ function Landing({ onLogin }) {
   );
 }
 
+// /?film — the welcome page as a self-running 16:9 loop, for the stand screen (press F11) and for recording.
+// One clock t (seconds) drives everything, so each segment is a pure function of time.
+const LOOP = { hero: 11, scene: 6.5, devices: 5, end: 6 };
+const LOOP_SCENES = [
+  { Visual: OrarScene, shot: '/media/app/scene-orar.webp', title: 'Tot orarul, într-o privire.', body: 'Zilele tale, colorate pe materii: ce urmează, la ce oră și în ce sală.' },
+  { Visual: NoteScene, shot: '/media/app/scene-note.webp', flip: true, title: 'Notele și media, mereu la zi.', body: 'Plus calculatorul: câte note îți mai trebuie ca să ajungi la media dorită.' },
+  { Visual: StormScene, shot: '/media/app/scene-storm.webp', title: 'Vezi furtuna înainte să lovească.', body: 'Trei teste în aceeași zi? Afli din timp, și de unde să începi recapitularea.' },
+  { Visual: BriefScene, shot: '/media/app/scene-azi.webp', flip: true, title: 'Dimineața, ziua pusă în ordine.', body: 'Orele de azi, ce ai de predat și ce pui în ghiozdan.' },
+];
+const LOOP_DEVICES = LOOP.hero + LOOP_SCENES.length * LOOP.scene;
+const LOOP_END = LOOP_DEVICES + LOOP.devices;
+const LOOP_TOTAL = LOOP_END + LOOP.end;
+const fadeIO = (t, a, b, f = 0.5) => useTransform(t, [a - f, a, b - f, b], [0, 1, 1, 0]);
+function LoopScene({ t, start, title, body, Visual, shot, flip, zoom }) {
+  const opacity = fadeIO(t, start, start + LOOP.scene);
+  const p = useTransform(t, [start + 0.3, start + 5], [0, 1]);
+  const textY = useTransform(t, [start - 0.5, start + 0.4], [24, 0]);
+  return (
+    <motion.div style={{ opacity }} className="absolute inset-0 flex items-center">
+      <div className={cx('mx-auto grid w-full max-w-[min(92vw,150vh)] items-center gap-[5vw]', flip ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-[0.8fr_1.2fr]')}>
+        <motion.div style={{ y: textY }} className={cx('relative z-10', flip && 'order-2')}>
+          <h2 className="font-display font-700 leading-[1.04]" style={{ fontSize: 'clamp(2rem, 4.6vh, 4.4rem)' }}>{title}</h2>
+          <p className="mt-[2vh] text-muted" style={{ fontSize: 'clamp(1.05rem, 2.3vh, 1.9rem)', lineHeight: 1.45 }}>{body}</p>
+        </motion.div>
+        <div className={cx('relative', flip && 'order-1')} style={{ zoom }}>
+          <SceneShot p={p} src={shot} flip={flip} />
+          <div className="relative"><Visual p={p} /></div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+function FilmLoop() {
+  const t = useMotionValue(0);
+  const [ready, setReady] = useState(false);
+  const [qr, setQr] = useState(null);
+  const scale = () => Math.min(1.6, Math.max(1, window.innerHeight / 760)); // the scene cards grow on big screens
+  const [zoom, setZoom] = useState(scale);
+  useEffect(() => { const on = () => setZoom(scale()); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  const imgs = useRef([]), canvas = useRef(null), shown = useRef(-1);
+  const record = new URLSearchParams(location.search).has('record'); // no QR in a recorded video: the address changes
+  useEffect(() => {
+    let left = FILM.n;
+    imgs.current = Array.from({ length: FILM.n }, (_, i) => { const im = new Image(); im.onload = im.onerror = () => { if (--left === 0) setReady(true); }; im.src = FILM.src(i); return im; });
+    if (!record) {
+      fetch('/api/demo').then((r) => r.json()).then((d) => {
+        if (!d.enabled || !d.publicUrl) return;
+        const make = () => { const q = window.qrcode(0, 'M'); q.addData(`${d.publicUrl}/?demo`); q.make(); setQr(q.createSvgTag({ cellSize: 8, margin: 0, scalable: true })); };
+        if (window.qrcode) make(); else { const sc = document.createElement('script'); sc.src = '/vendor/qrcode.js'; sc.onload = make; document.head.appendChild(sc); }
+      }).catch(() => {});
+    }
+    document.body.style.cursor = 'none';
+    return () => { document.body.style.cursor = ''; };
+  }, []);
+  const draw = (v) => {
+    const cv = canvas.current; if (!cv) return;
+    const i = Math.round(Math.min(1, Math.max(0, v / 8)) * (FILM.n - 1));
+    const im = imgs.current[i]; if (i === shown.current || !im || !im.complete || !im.naturalWidth) return;
+    const ctx = cv.getContext('2d'), sc = Math.max(cv.width / im.naturalWidth, cv.height / im.naturalHeight), sw = cv.width / sc, sh = cv.height / sc;
+    ctx.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, 0, 0, cv.width, cv.height); shown.current = i;
+  };
+  useMotionValueEvent(t, 'change', draw);
+  useEffect(() => {
+    if (!ready) return;
+    const size = () => { const cv = canvas.current, r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); shown.current = -1; draw(t.get()); };
+    size(); window.addEventListener('resize', size);
+    let raf, start = performance.now();
+    const tick = (now) => { t.set(((now - start) / 1000) % LOOP_TOTAL); raf = requestAnimationFrame(tick); };
+    // ?record: hold on the first frame until the recorder calls __filmGo(), so the video starts at 0
+    if (record) window.__filmGo = () => { start = performance.now(); raf = requestAnimationFrame(tick); };
+    else raf = requestAnimationFrame(tick);
+    window.__filmTotal = LOOP_TOTAL; window.__filmReady = true;
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', size); };
+  }, [ready]);
+  const heroO = fadeIO(t, 0, LOOP.hero);
+  const beat = (a, b) => ({ opacity: useTransform(t, [a, a + 0.4, b - 0.4, b], [0, 1, 1, 0]), y: useTransform(t, [a, a + 0.4, b - 0.4, b], [16, 0, 0, -16]) });
+  const beats = [beat(0.2, 4), beat(4, 8.2), beat(8.4, LOOP.hero)];
+  const devO = fadeIO(t, LOOP_DEVICES, LOOP_END);
+  const lapY = useTransform(t, [LOOP_DEVICES - 0.5, LOOP_END], [60, -10]), phoneY = useTransform(t, [LOOP_DEVICES - 0.5, LOOP_END], [140, -30]);
+  const endO = useTransform(t, [LOOP_END - 0.5, LOOP_END, LOOP_TOTAL - 0.6, LOOP_TOTAL], [0, 1, 1, 0]);
+  const endY = useTransform(t, [LOOP_END - 0.5, LOOP_END + 0.5], [20, 0]);
+  const fade = 'linear-gradient(to right, transparent, #000 11%, #000 89%, transparent), linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent)';
+  const frame = 'linear-gradient(#2c3530, #18201c)';
+  return (
+    <MotionConfig reducedMotion="never">
+      <div className="graph-paper fixed inset-0 overflow-hidden">
+        {!ready && <div className="grid h-full place-items-center"><Logo size={72} /></div>}
+        {/* hero */}
+        <motion.div style={{ opacity: heroO }} className="absolute inset-0 flex flex-col items-center px-[4vw] pt-[6vh] text-center">
+          <h1 className="font-display font-700 leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(2.6rem, 7.4vh, 6.6rem)' }}>Săptămâna ta,<br />pusă în ordine dinainte.</h1>
+          <div className="relative mt-[2vh] flex min-h-0 w-full flex-1 items-center justify-center">
+            <canvas ref={canvas} aria-hidden="true" className="block h-auto" style={{ aspectRatio: '1.7778', width: 'min(100%, calc((100vh - 38vh) * 1.7778))', WebkitMaskImage: fade, maskImage: fade, WebkitMaskComposite: 'source-in', maskComposite: 'intersect' }} />
+          </div>
+          <div className="relative mb-[6vh] h-[7vh] w-full">
+            {FILM_BEATS.map((txt, i) => <motion.p key={i} style={beats[i]} className="absolute inset-x-0 mx-auto max-w-[80vw] font-display font-700 leading-[1.1]" >{<span style={{ fontSize: 'clamp(1.6rem, 4.2vh, 3.6rem)' }}>{txt}</span>}</motion.p>)}
+          </div>
+        </motion.div>
+        {LOOP_SCENES.map((sc, i) => <LoopScene key={i} t={t} start={LOOP.hero + i * LOOP.scene} zoom={zoom} {...sc} />)}
+        {/* the real app */}
+        <motion.div style={{ opacity: devO }} className="absolute inset-0 flex flex-col justify-center px-[6vw]">
+          <h2 className="font-display font-700 leading-[1.05]" style={{ fontSize: 'clamp(2rem, 5vh, 4.6rem)' }}>Și exact așa arată aplicația.</h2>
+          <div className="relative mt-[4vh] w-full max-w-[min(88vw,150vh)]">
+            <motion.div style={{ y: lapY }} className="w-[80%]">
+              <div className="rounded-t-[1.3rem] rounded-b-md p-[1.2%] shadow-lift" style={{ background: frame }}><img src="/media/app/laptop-catalog.webp" alt="" className="block h-auto w-full rounded-[0.45rem]" /></div>
+              <div className="relative -mx-[5%] h-[2vh] rounded-b-[1.1rem] shadow-card" style={{ background: 'linear-gradient(#e9ece7, #bcc5be)' }} />
+            </motion.div>
+            <motion.div style={{ y: phoneY }} className="absolute bottom-[-4vh] right-[2%] w-[22%]">
+              <div className="p-[3.4%] shadow-lift" style={{ background: frame, borderRadius: '15% / 7%' }}><img src="/media/app/phone-azi.webp" alt="" className="block h-auto w-full" style={{ borderRadius: '12% / 5.6%' }} /></div>
+            </motion.div>
+          </div>
+        </motion.div>
+        {/* end card */}
+        <motion.div style={{ opacity: endO, y: endY }} className="absolute inset-0 flex items-center justify-center px-[6vw]">
+          <div className={cx('grid w-full max-w-[min(90vw,150vh)] items-center gap-[6vw]', qr ? 'grid-cols-[1.2fr_0.8fr]' : 'grid-cols-1 text-center')}>
+            <div className={qr ? '' : 'flex flex-col items-center'}>
+              <div className="flex items-center gap-[1.6vh]"><Logo size={72} /><span className="font-display font-800 tracking-tight" style={{ fontSize: 'clamp(2rem, 5.4vh, 4.6rem)' }}>SchoolPilot</span></div>
+              <p className="mt-[4vh] font-display font-700 leading-[1.04]" style={{ fontSize: 'clamp(2.2rem, 6.4vh, 5.6rem)', textWrap: 'balance' }}>Săptămâna ta, pusă în ordine dinainte.</p>
+              <p className="mt-[2.4vh] text-muted" style={{ fontSize: 'clamp(1.1rem, 2.6vh, 2rem)' }}>{qr ? 'Scanează codul: intri direct în aplicație, ca elev.' : 'Pentru elevi, profesori și administratori.'}</p>
+            </div>
+            {qr && <div className="rounded-[2rem] border border-line bg-white p-[3vh] shadow-lift"><div className="aspect-square w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qr }} /></div>}
+          </div>
+        </motion.div>
+      </div>
+    </MotionConfig>
+  );
+}
+
+// /?qr — for a screen at the stand: phones scan it and open the demo student's Azi.
+// The code points at the public (tunnel) address that demo.sh records, so it is right even on localhost.
+function DemoQR() {
+  const [info, setInfo] = useState(null);
+  const [ready, setReady] = useState(!!window.qrcode);
+  useEffect(() => {
+    const get = () => fetch('/api/demo').then((r) => r.json()).then(setInfo).catch(() => setInfo({ enabled: false }));
+    get(); const poll = setInterval(get, 15000); // a restarted tunnel gets a new address
+    if (!window.qrcode) { const sc = document.createElement('script'); sc.src = '/vendor/qrcode.js'; sc.onload = () => setReady(true); document.head.appendChild(sc); }
+    return () => clearInterval(poll);
+  }, []);
+  const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname);
+  const base = (info && info.publicUrl) || (local ? null : location.origin);
+  const link = base ? `${base}/?demo` : null;
+  const svg = useMemo(() => {
+    if (!ready || !link) return null;
+    const q = window.qrcode(0, 'M'); q.addData(link); q.make();
+    return q.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+  }, [ready, link]);
+  const problem = !info ? null : !info.enabled ? 'Modul demo nu e pornit. Pornește serverul cu ./demo.sh.'
+    : !link ? 'Nu știu adresa publică. Pornește tunelul cu ./demo.sh sau deschide pagina de pe adresa tunelului.' : null;
+  return (
+    <div className="graph-paper grid min-h-screen place-items-center px-6 py-10">
+      <div className="grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        <div>
+          <div className="flex items-center gap-3"><Logo size={44} /><span className="font-display text-2xl font-800 tracking-tight">SchoolPilot</span></div>
+          <h1 className="mt-8 font-display font-700 leading-[1.02]" style={{ fontSize: 'clamp(2.4rem, 5vw, 4.6rem)', textWrap: 'balance' }}>Încearcă aplicația pe telefonul tău.</h1>
+          <ol className="mt-8 space-y-4 text-[clamp(1.05rem,1.6vw,1.35rem)]">
+            {['Scanează codul cu camera telefonului.', `Intri direct ca ${info && info.name ? info.name : 'un elev'}, pe pagina Azi. Fără parolă.`, 'Uită-te prin orar, note și anunțuri, sau scrie-i un mesaj profesorului.'].map((t, i) => (
+              <li key={i} className="flex items-start gap-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand font-display font-700 text-white">{i + 1}</span><span className="pt-1">{t}</span></li>
+            ))}
+          </ol>
+        </div>
+        <div className="mx-auto w-full max-w-[460px]">
+          <div className="rounded-[28px] border border-line bg-white p-7 shadow-lift">
+            {svg ? <div className="aspect-square w-full [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+              : <div className="grid aspect-square w-full place-items-center rounded-2xl bg-paper p-6 text-center text-[15px] text-muted">{problem || <Spinner size={22} />}</div>}
+          </div>
+          {link && <p className="mt-4 break-all text-center font-mono text-[13px] text-muted">{link.replace(/^https?:\/\//, '')}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Root() {
   const [phase, setPhase] = useState('boot'); // boot | landing | login | change | app | error
   const [account, setAccount] = useState(null);
   const [notice, setNotice] = useState(null);
   const toLogin = (msg) => { setAccount(null); setNotice(msg || null); setPhase('login'); };
-  const logout = async () => { try { await sb.auth.signOut(); } catch (e) {} toLogin(); };
+  const logout = async () => {
+    if (demoToken) { setDemo(null); setAccount(null); setNotice(null); setPhase('landing'); window.scrollTo(0, 0); return; }
+    try { await sb.auth.signOut(); } catch (e) {} toLogin();
+  };
+  const qrMode = new URLSearchParams(location.search).has('qr');
+  const filmMode = new URLSearchParams(location.search).has('film');
   // Who am I? Identity comes from the Supabase session token, checked by the server.
   const loadMe = async () => {
     try {
@@ -2585,21 +2772,38 @@ function Root() {
     }
   };
   useEffect(() => {
-    onUnauthorized = () => { if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.'); };
+    onUnauthorized = () => {
+      if (demoToken) { setDemo(null); setAccount(null); setPhase('landing'); return; }
+      if (sb) sb.auth.signOut().catch(() => {}); toLogin('Sesiunea a expirat. Intră din nou în cont.');
+    };
     onMustChangePassword = () => { loadMe().catch((e) => toLogin(errText(e))); };
     // Never trap the user on the boot spinner: if the session check or /api/me stalls — e.g. a
     // stored token that can't reach Supabase — fall back to the login screen after a short guard.
     let settled = false;
     const done = () => { settled = true; };
     const guard = setTimeout(() => { if (!settled) { done(); toLogin(); } }, 9000);
+    if (qrMode || filmMode) return () => clearTimeout(guard);
     fetch('/api/config').then((r) => r.json()).then(async (cfg) => {
       sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey);
+      // /?demo (the stand's QR code): straight into the demo student's Azi
+      if (new URLSearchParams(location.search).has('demo')) {
+        const d = await fetch('/api/demo?pass=1').then((r) => r.json()).catch(() => ({}));
+        history.replaceState(null, '', location.pathname);
+        if (d.token) setDemo(d.token);
+        else { done(); setNotice('Modul demo nu este pornit acum.'); return setPhase('landing'); }
+      }
+      if (demoToken) {
+        try { await loadMe(); } catch (e) { setDemo(null); setPhase('landing'); } finally { done(); }
+        return;
+      }
       const { data } = await sb.auth.getSession();
       if (!data.session) { done(); return setPhase('landing'); }
       try { await loadMe(); } catch (e) { toLogin(errText(e)); } finally { done(); }
     }).catch((e) => { done(); setNotice(errText(e)); setPhase('error'); });
     return () => clearTimeout(guard);
   }, []);
+  if (qrMode) return <DemoQR />;
+  if (filmMode) return <FilmLoop />;
   if (phase === 'boot') return <div className="graph-paper grid min-h-screen place-items-center text-muted"><Spinner size={18} /></div>;
   if (phase === 'error') return <AuthCard sub="Autentificare"><FormError>Nu pot contacta serverul: {notice}. Pornește <code className="rounded bg-paper px-1">python3 server.py</code>.</FormError></AuthCard>;
   if (phase === 'landing') return <Landing onLogin={() => setPhase('login')} />;

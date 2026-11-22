@@ -13,6 +13,7 @@ Env:  PORT=8000  DB=schoolpilot.db
 import base64
 import gzip
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -381,6 +382,47 @@ def forget_email(email):
     with _token_lock:
         for k in [k for k, v in _token_cache.items() if v[1]["email"] == email]:
             del _token_cache[k]
+
+# ---- demo pass: a QR code at a stand logs phones in as one demo student, without Supabase ----
+# Off unless DEMO_STUDENT_ID is set (demo.sh sets it). The pass is signed with a key derived from
+# the server's secret, lasts DEMO_TTL, and stops working as soon as demo mode is switched off.
+DEMO_TTL = 12 * 3600
+PUBLIC_URL_FILE = os.environ.get("PUBLIC_URL_FILE", "/tmp/schoolpilot-public-url")
+
+def demo_student_id():
+    try:
+        return int(os.environ.get("DEMO_STUDENT_ID") or 0) or None
+    except ValueError:
+        return None
+
+def _demo_key():
+    return hmac.new((SUPABASE_SECRET_KEY or "schoolpilot").encode(), b"schoolpilot-demo-pass", hashlib.sha256).digest()
+
+def demo_pass(uid):
+    body = base64.urlsafe_b64encode(json.dumps({"u": uid, "exp": int(time.time()) + DEMO_TTL}).encode()).decode().rstrip("=")
+    sig = hmac.new(_demo_key(), body.encode(), hashlib.sha256).hexdigest()
+    return "demo.%s.%s" % (body, sig)
+
+def demo_identity(token):
+    """The demo student's id for a valid pass, else None."""
+    try:
+        _, body, sig = token.split(".")
+        if not hmac.compare_digest(sig, hmac.new(_demo_key(), body.encode(), hashlib.sha256).hexdigest()):
+            return None
+        data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except (ValueError, TypeError):
+        return None
+    if data.get("exp", 0) < time.time() or data.get("u") != demo_student_id():
+        return None
+    return data["u"]
+
+def public_url():
+    try:
+        with open(PUBLIC_URL_FILE) as f:
+            url = f.read().strip()
+        return url if url.startswith("https://") else None
+    except OSError:
+        return os.environ.get("PUBLIC_URL") or None
 
 _PW_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -1451,6 +1493,12 @@ class Handler(BaseHTTPRequestHandler):
         h = self.headers.get("Authorization", "")
         if not h.startswith("Bearer ") or not h[7:].strip():
             raise HttpError(401, "Autentificare necesară.")
+        if h[7:].startswith("demo."):
+            uid = demo_identity(h[7:].strip())
+            me = user_row(con, uid) if uid else None
+            if not me or me["role"] != "student":
+                raise HttpError(401, "Sesiunea demo a expirat. Scanează din nou codul.")
+            return me, {"must_change": False, "email": me["email"], "auth_id": None, "demo": True}
         info = token_identity(h[7:].strip())
         me = con.execute("SELECT * FROM users WHERE email=?", (info["email"],)).fetchone()
         if not me:
@@ -1488,6 +1536,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path).path
+        if p == "/api/demo":  # public: hands out a demo pass only while demo mode is on
+            uid, want_pass = demo_student_id(), "pass" in self._query()
+            with _lock:
+                con = connect()
+                try:
+                    u = user_row(con, uid) if uid else None
+                finally:
+                    con.close()
+            if not u or u["role"] != "student":
+                return self._json({"enabled": False, "publicUrl": public_url()}, 404 if want_pass else 200)
+            out = {"enabled": True, "name": u["name"], "publicUrl": public_url()}
+            if want_pass:
+                out["token"] = demo_pass(uid)
+            return self._json(out)
         if p == "/api/config":  # public: never add the secret key here
             return self._json({"supabaseUrl": SUPABASE_URL, "supabasePublishableKey": SUPABASE_PUBLISHABLE_KEY})
         if p.startswith("/api/"):
@@ -1501,7 +1563,7 @@ class Handler(BaseHTTPRequestHandler):
         q = self._query()
         me, info = self._me(con, p)
         if p == "/api/me":
-            return build_me(con, me, info["must_change"])
+            return {**build_me(con, me, info["must_change"]), "demo": bool(info.get("demo"))}
         if p == "/api/subjects":
             return {"subjects": subjects_catalog()}
         if p == "/api/admin":
